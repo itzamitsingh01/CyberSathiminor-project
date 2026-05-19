@@ -9,8 +9,8 @@ const sessionService = require('../services/session.service');
  */
 async function createSession(req, res) {
     try {
-        const { toolType = 'general' } = req.body;
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const { toolType = 'general', frontendUrl } = req.body;
+        const baseUrl = frontendUrl || `${req.protocol}://${req.get('host')}`;
         const session = await sessionService.createSession(toolType, baseUrl);
         res.json({ success: true, session });
     } catch (err) {

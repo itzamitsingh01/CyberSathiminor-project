@@ -24,14 +24,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/files', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ── Routes ──────────────────────────────────────────────────────
-app.use('/session', sessionRoutes);
-app.use('/upload', uploadRoutes);
-app.use('/passport', passportRoutes);
-app.use('/compress', compressRoutes);
-app.use('/pdf', pdfRoutes);
-app.use('/signature', signatureRoutes);
+app.use('/api/session', sessionRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/passport', passportRoutes);
+app.use('/api/compress', compressRoutes);
+app.use('/api/pdf', pdfRoutes);
+app.use('/api/signature', signatureRoutes);
 
 // Health check
 app.get('/', (_req, res) => res.json({ status: 'ok', app: 'MP Online Hub' }));
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error('Unhandled Error:', err);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
+});
 
 module.exports = app;

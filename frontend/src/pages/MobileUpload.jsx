@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
@@ -13,6 +13,16 @@ export default function MobileUpload() {
     const [progress, setProgress] = useState(0)
     const [done, setDone] = useState(false)
     const [errorMsg, setErrorMsg] = useState(null)
+    const [checkingSession, setCheckingSession] = useState(true)
+
+    useEffect(() => {
+        axios.get(`/session/${sessionId}`)
+            .then(() => setCheckingSession(false))
+            .catch(() => {
+                setErrorMsg('Session expired or invalid. Please ask the shop for a new QR code.')
+                setCheckingSession(false)
+            })
+    }, [sessionId])
 
     const onDrop = useCallback((accepted) => {
         if (!accepted[0]) return
@@ -27,7 +37,9 @@ export default function MobileUpload() {
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop, maxFiles: 1,
+        maxSize: 10 * 1024 * 1024,
         accept: { 'image/*': [], 'application/pdf': ['.pdf'] },
+        onDropRejected: () => toast.error('File too large or invalid. Max 10MB.')
     })
 
     async function handleUpload() {
@@ -75,7 +87,13 @@ export default function MobileUpload() {
                     </div>
                 </div>
 
-                {done ? (
+                {checkingSession ? (
+                    <div style={{ textAlign: 'center', padding: '44px 24px', background: 'rgba(79,70,229,0.05)', border: '1px solid rgba(79,70,229,0.15)', borderRadius: 24 }}>
+                        <div className="spin" style={{ display: 'inline-block', fontSize: 32, color: '#4f46e5', marginBottom: 18 }}>◌</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: '#1f2937', marginBottom: 10 }}>Connecting...</div>
+                        <div style={{ fontSize: 14, color: '#6b7280', lineHeight: 1.6 }}>Validating your secure session.</div>
+                    </div>
+                ) : done ? (
                     /* ── Success ─────────────────────────────────── */
                     <div style={{ textAlign: 'center', padding: '44px 24px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 24 }}>
                         <CheckCircle size={60} color="#10b981" style={{ marginBottom: 18 }} />

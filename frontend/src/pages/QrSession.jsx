@@ -53,7 +53,15 @@ export default function QrSession() {
             : window.location.origin.includes('5173') ? 'http://localhost:5000' : window.location.origin;
 
         const socket = io(socketUrl)
-        socket.on('connect', () => { setConnected(true); socket.emit('join-session', sessionId) })
+        socket.on('connect', () => { 
+            setConnected(true); 
+            socket.emit('join-session', sessionId) 
+            // If backend restarted, session might be gone from memory
+            axios.get(`/session/${sessionId}`).catch(() => {
+                toast.error('Session expired or lost. Please generate a new QR.')
+                handleEnd()
+            })
+        })
         socket.on('disconnect', () => setConnected(false))
         socket.on('file-uploaded', (data) => {
             setFiles((prev) => [data.file, ...prev])
@@ -65,7 +73,8 @@ export default function QrSession() {
     async function handleCreate() {
         setLoading(true)
         try {
-            const res = await axios.post('/session/create', { toolType })
+            const frontendUrl = window.location.origin;
+            const res = await axios.post('/session/create', { toolType, frontendUrl })
             const s = res.data.session
             setSession(s)
             setFiles([])
@@ -160,7 +169,7 @@ export default function QrSession() {
                             <img src={session.qrDataUrl} alt="QR" style={{ width: 200, height: 200, display: 'block' }} />
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, wordBreak: 'break-all' }}>
-                            {import.meta.env.MODE === 'production' ? session.uploadUrl.replace('localhost:5173', 'cyber-sathi-delta.vercel.app') : session.uploadUrl}
+                            {session.uploadUrl}
                         </div>
                     </div>
 
