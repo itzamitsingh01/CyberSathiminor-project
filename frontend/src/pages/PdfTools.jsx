@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
+import axios from '../services/api'
 import toast from 'react-hot-toast'
 import { ArrowLeft, FileText, Download, Image, X, ChevronUp, ChevronDown } from 'lucide-react'
+import { useGuestLimit } from '../hooks/useGuestLimit'
 
 /** Fetch via backend proxy and trigger a real browser download (bypasses cross-origin download restrictions) */
 async function downloadFile(proxyUrl, filename) {
@@ -31,6 +32,7 @@ const TABS = [
 
 export default function PdfTools() {
     const nav = useNavigate()
+    const { checkAndConsume, GuestModal } = useGuestLimit('pdf')
     const [tab, setTab] = useState('merge')
     const [files, setFiles] = useState([])
     const [loading, setLoading] = useState(false)
@@ -52,6 +54,7 @@ export default function PdfTools() {
     function moveDown(i) { if (i === files.length - 1) return; const a = [...files];[a[i], a[i + 1]] = [a[i + 1], a[i]]; setFiles(a) }
 
     async function handleProcess() {
+        if (!checkAndConsume()) return
         if (files.length === 0) return toast.error('Add files first')
         if (tab === 'merge' && files.length < 2) return toast.error('Need at least 2 PDFs to merge')
         setLoading(true)
@@ -117,32 +120,32 @@ export default function PdfTools() {
             {/* File list with reorder */}
             {files.map((f, i) => (
                 <div key={`${f.name}-${i}`} className="file-item" style={{ animation: 'fadeSlide 0.25s ease both' }}>
-                    <FileText size={18} color="#64748b" />
+                    <FileText size={18} color="var(--muted)" />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {f.name}
                         </div>
-                        <div style={{ fontSize: 11, color: '#475569' }}>{Math.round(f.size / 1024)} KB</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)' }}>{Math.round(f.size / 1024)} KB</div>
                     </div>
                     {multiple && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            <button onClick={() => moveUp(i)} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 2 }}>
+                            <button onClick={() => moveUp(i)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 2 }}>
                                 <ChevronUp size={14} />
                             </button>
-                            <button onClick={() => moveDown(i)} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 2 }}>
+                            <button onClick={() => moveDown(i)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 2 }}>
                                 <ChevronDown size={14} />
                             </button>
                         </div>
                     )}
                     <button onClick={() => removeFile(i)}
-                        style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', padding: 4 }}>
+                        style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4 }}>
                         <X size={16} />
                     </button>
                 </div>
             ))}
 
             {files.length > 0 && (
-                <div style={{ fontSize: 12, color: '#334155', marginBottom: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
                     {files.length} file{files.length !== 1 ? 's' : ''} selected
                 </div>
             )}
@@ -173,6 +176,7 @@ export default function PdfTools() {
                     </button>
                 </div>
             )}
+            <GuestModal />
         </div>
     )
 }

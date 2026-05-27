@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
+import axios from '../services/api'
 import toast, { Toaster } from 'react-hot-toast'
 import { Upload, CheckCircle, AlertCircle, Camera, Shield } from 'lucide-react'
 

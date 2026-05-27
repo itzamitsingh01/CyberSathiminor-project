@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
+import axios from '../services/api'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Camera, Download, Image, Printer, Scissors, Eraser } from 'lucide-react'
+import { ArrowLeft, Camera, Download, Image, Printer, Scissors, Eraser, X } from 'lucide-react'
+import { useGuestLimit } from '../hooks/useGuestLimit'
 
 const PRESETS = [
     { n: 6, label: '6', hint: '2×3' },
@@ -17,12 +18,47 @@ const MAX = 30
 
 export default function PassportTool() {
     const nav = useNavigate()
+    const { checkAndConsume, remainingUses, GuestModal } = useGuestLimit('passport')
     const [file, setFile] = useState(null)
     const [preview, setPreview] = useState(null)
     const [count, setCount] = useState(8)
     const [removeBg, setRemoveBg] = useState(false)
     const [loading, setLoading] = useState(false)
     const [resultUrl, setResultUrl] = useState(null)
+    const [showPrintModal, setShowPrintModal] = useState(false)
+
+    function triggerPrintDirectly() {
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+        
+        iframe.contentDocument.write(`
+            <html>
+                <head>
+                    <title>A4 Print Layout</title>
+                    <style>
+                        @page { size: A4 portrait; margin: 0; }
+                        body { margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; background: white; }
+                        img { max-width: 100%; max-height: 100%; object-fit: contain; }
+                    </style>
+                </head>
+                <body>
+                    <img src="${resultUrl}" onload="window.focus(); window.print();" />
+                </body>
+            </html>
+        `);
+        
+        iframe.contentWindow.onload = () => {
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 10000);
+        };
+    }
 
     const onDrop = useCallback((accepted) => {
         if (!accepted[0]) return
@@ -42,6 +78,7 @@ export default function PassportTool() {
     }
 
     async function handleGenerate() {
+        if (!checkAndConsume()) return   // guest limit check
         const n = parseInt(count, 10)
         if (!file) return toast.error('Please upload a photo first')
         if (!n || n < 1) return toast.error('Enter a valid photo count (1–30)')
@@ -77,7 +114,7 @@ export default function PassportTool() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                         <img src={preview} alt="preview"
                             style={{ width: 90, height: 116, objectFit: 'cover', borderRadius: 8, border: '2px solid rgba(99,102,241,0.4)' }} />
-                        <span style={{ fontSize: 13, color: '#64748b' }}>Tap to change photo</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>Tap to change photo</span>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -85,7 +122,7 @@ export default function PassportTool() {
                         <p style={{ color: '#94a3b8', fontSize: 15 }}>
                             {isDragActive ? 'Drop photo here' : 'Tap to upload a photo'}
                         </p>
-                        <span style={{ fontSize: 12, color: '#334155' }}>JPG, PNG – max 10MB</span>
+                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>JPG, PNG – max 10MB</span>
                     </div>
                 )}
             </div>
@@ -119,8 +156,8 @@ export default function PassportTool() {
                             width: 72,
                             padding: '8px 10px',
                             borderRadius: 10,
-                            border: '1.5px solid rgba(79,70,229,0.3)',
-                            background: '#ffffff',
+                            border: '1.5px solid var(--border)',
+                            background: 'var(--input-bg)',
                             color: 'var(--text)',
                             fontSize: 15,
                             fontWeight: 700,
@@ -147,14 +184,14 @@ export default function PassportTool() {
             <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '12px 14px', borderRadius: 12, marginBottom: 16,
-                background: removeBg ? 'rgba(79,70,229,0.12)' : '#ffffff',
-                border: `1.5px solid ${removeBg ? 'rgba(79,70,229,0.4)' : 'var(--border)'}`,
+                background: removeBg ? 'rgba(79,70,229,0.12)' : 'var(--card)',
+                border: `1.5px solid ${removeBg ? 'var(--primary)' : 'var(--border)'}`,
                 transition: 'all 0.2s ease', cursor: 'pointer',
             }} onClick={() => setRemoveBg(v => !v)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <Eraser size={16} color={removeBg ? '#4f46e5' : 'var(--muted)'} />
                     <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: removeBg ? '#4338ca' : 'var(--text)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: removeBg ? 'var(--primary)' : 'var(--text)' }}>
                             Remove Background → White
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
@@ -165,7 +202,7 @@ export default function PassportTool() {
                 {/* Toggle pill */}
                 <div style={{
                     width: 40, height: 22, borderRadius: 11,
-                    background: removeBg ? '#4f46e5' : '#e5e7eb',
+                    background: removeBg ? 'var(--primary)' : 'var(--border)',
                     position: 'relative', transition: 'background 0.2s',
                     flexShrink: 0,
                 }}>
@@ -198,13 +235,61 @@ export default function PassportTool() {
                             <Download size={16} /> Download
                         </a>
                         <button className="btn-secondary" style={{ flex: 1 }}
-                            onClick={() => { const w = window.open(resultUrl); w.print() }}>
-                            <Printer size={16} /> Print
+                            onClick={() => setShowPrintModal(true)}>
+                            <Printer size={16} /> Print Preview
                         </button>
                     </div>
                 </div>
             )
             }
+            <GuestModal />
+
+            {/* Print Preview Modal */}
+            {showPrintModal && (
+                <div className="glm-overlay" onClick={() => setShowPrintModal(false)}>
+                    <div className="glm-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '640px' }}>
+                        <button className="glm-close" onClick={() => setShowPrintModal(false)} aria-label="Close">
+                            <X size={18} />
+                        </button>
+                        
+                        <div className="badge badge-amber" style={{ marginBottom: '12px' }}>
+                            <Printer size={13} /> A4 PRINT PREVIEW
+                        </div>
+
+                        <h2 className="glm-title" style={{ fontSize: '20px', margin: '4px 0 12px 0' }}>A4 Layout Preview</h2>
+                        
+                        {/* Printable sheet image preview */}
+                        <div style={{ 
+                            background: 'var(--input-bg)', border: '1px dashed var(--border)', 
+                            borderRadius: '12px', padding: '16px', display: 'flex', 
+                            justifyContent: 'center', marginBottom: '16px' 
+                        }}>
+                            <img src={resultUrl} alt="A4 Sheet preview" style={{ 
+                                maxHeight: '360px', maxWidth: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', 
+                                border: '1px solid var(--border)', borderRadius: '4px', background: 'white' 
+                            }} />
+                        </div>
+
+                        {/* Print Instructions */}
+                        <div className="spam-notice" style={{ background: 'rgba(79,70,229,0.08)', border: '1px solid rgba(79,70,229,0.18)', marginBottom: '20px', padding: '12px', borderRadius: '8px', display: 'flex', gap: '8px' }}>
+                            <span style={{ fontSize: '16px' }}>💡</span>
+                            <span style={{ fontSize: '12px', color: 'var(--muted)', textAlign: 'left' }}>
+                                <strong>Printer Settings Tip:</strong> For perfect 35x45mm sizing, set layout to <strong>Portrait</strong>, paper size to <strong>A4</strong>, and margins to <strong>None</strong> (or Borderless) in the print dialog.
+                            </span>
+                        </div>
+
+                        {/* CTA actions */}
+                        <div className="glm-actions">
+                            <button className="glm-btn glm-btn-primary" onClick={triggerPrintDirectly}>
+                                <Printer size={17} /> Trigger Print
+                            </button>
+                            <button className="glm-btn glm-btn-secondary" onClick={() => setShowPrintModal(false)}>
+                                Close Preview
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     )
 }

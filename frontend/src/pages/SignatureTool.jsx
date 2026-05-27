@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
+import axios from '../services/api'
 import toast from 'react-hot-toast'
 import { ArrowLeft, PenLine, Download, RefreshCw, Upload } from 'lucide-react'
+import { useGuestLimit } from '../hooks/useGuestLimit'
 
 /** Fetch a URL via backend proxy and trigger a real browser download */
 async function downloadFile(proxyUrl, filename) {
@@ -30,6 +31,7 @@ const TABS = [
 
 export default function SignatureTool() {
     const nav = useNavigate()
+    const { checkAndConsume, GuestModal } = useGuestLimit('signature')
     const [tab, setTab] = useState('upload')
     const [file, setFile] = useState(null)
     const [preview, setPreview] = useState(null)
@@ -96,6 +98,7 @@ export default function SignatureTool() {
     }, [tab])
 
     async function handleProcess() {
+        if (!checkAndConsume()) return
         setLoading(true)
         try {
             const fd = new FormData()
@@ -146,7 +149,7 @@ export default function SignatureTool() {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                             <img src={preview} alt="sig"
                                 style={{ maxHeight: 110, borderRadius: 8, background: '#fff', padding: 10 }} />
-                            <span style={{ fontSize: 13, color: '#64748b' }}>Tap to change</span>
+                            <span style={{ fontSize: 13, color: 'var(--muted)' }}>Tap to change</span>
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -203,7 +206,7 @@ export default function SignatureTool() {
                 <input type="range" min="100" max="255" value={threshold}
                     onChange={(e) => setThreshold(Number(e.target.value))}
                     style={{ accentColor: '#ec4899' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#334155', marginTop: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
                     <span>Keep more ink</span><span>Remove more BG</span>
                 </div>
             </div>
@@ -216,7 +219,7 @@ export default function SignatureTool() {
             {/* Result */}
             {resultUrl && (
                 <div style={{ marginTop: 20, animation: 'fadeSlide 0.4s ease both' }}>
-                    <div style={{ fontSize: 13, color: '#34d399', fontWeight: 600, marginBottom: 10 }}>✅ Background removed</div>
+                    <div style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginBottom: 10 }}>✅ Background removed</div>
                     {/* Checkerboard to show transparency */}
                     <div style={{
                         background: 'repeating-conic-gradient(#f3f4f6 0% 25%, #e5e7eb 0% 50%) 0 0 / 24px 24px',
@@ -237,6 +240,7 @@ export default function SignatureTool() {
                     </button>
                 </div>
             )}
+            <GuestModal />
         </div>
     )
 }

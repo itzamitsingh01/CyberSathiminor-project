@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import "tailwindcss";
 
 /* ═══════════════════════════════════════════════
    Design tokens
@@ -7,15 +7,45 @@
 :root {
   --primary: #4f46e5;
   --primary-dark: #4338ca;
-  --primary-glow: rgba(99, 102, 241, 0.2);
+  --primary-glow: rgba(99, 102, 241, 0.15);
   --accent: #f59e0b;
   --success: #10b981;
   --danger: #ef4444;
-  --bg: #f3f4f6;
+  --bg: #f8fafc;
   --card: #ffffff;
-  --border: #e5e7eb;
-  --text: #1f2937;
-  --muted: #6b7280;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #64748b;
+  --input-bg: #f1f5f9;
+  --input-bg-focus: #ffffff;
+  --btn-secondary-bg: rgba(0, 0, 0, 0.03);
+  --btn-secondary-bg-hover: rgba(0, 0, 0, 0.06);
+  --file-item-bg: #f8fafc;
+  --sidebar-bg: #1e1b4b;
+  --sidebar-text: #f1f5f9;
+  --sidebar-border: #312e81;
+}
+
+.dark {
+  --primary: #6366f1;
+  --primary-dark: #4f46e5;
+  --primary-glow: rgba(99, 102, 241, 0.35);
+  --accent: #fbbf24;
+  --success: #34d399;
+  --danger: #f87171;
+  --bg: #090d16;
+  --card: #111827;
+  --border: #1f2937;
+  --text: #f9fafb;
+  --muted: #9ca3af;
+  --input-bg: #1f2937;
+  --input-bg-focus: #111827;
+  --btn-secondary-bg: rgba(255, 255, 255, 0.05);
+  --btn-secondary-bg-hover: rgba(255, 255, 255, 0.08);
+  --file-item-bg: #1f2937;
+  --sidebar-bg: #0c0f1d;
+  --sidebar-text: #f1f5f9;
+  --sidebar-border: #1e293b;
 }
 
 /* ═══════════════════════════════════════════════
@@ -62,10 +92,10 @@ body::before {
 .page {
   position: relative;
   z-index: 1;
-  min-height: 100vh;
-  padding: 20px 16px 60px;
-  max-width: 520px;
-  margin: 0 auto;
+  min-height: calc(100vh - 80px);
+  padding: 24px 24px 80px;
+  max-width: 100%;
+  margin: 0;
 }
 
 /* ═══════════════════════════════════════════════
@@ -131,7 +161,7 @@ body::before {
   gap: 8px;
   width: 100%;
   padding: 13px 20px;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--btn-secondary-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -143,7 +173,7 @@ body::before {
 }
 
 .btn-secondary:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--btn-secondary-bg-hover);
 }
 
 .btn-danger {
@@ -193,7 +223,7 @@ body::before {
 ═══════════════════════════════════════════════ */
 .input {
   width: 100%;
-  background: #f8fafc;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 13px 16px;
@@ -206,7 +236,7 @@ body::before {
 
 .input:focus {
   border-color: var(--primary);
-  background: #ffffff;
+  background: var(--input-bg-focus);
 }
 
 label {
@@ -249,7 +279,7 @@ label {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  background: #f8fafc;
+  background: var(--file-item-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   margin-bottom: 8px;
@@ -355,7 +385,7 @@ label {
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--btn-secondary-bg);
   border: 1px solid var(--border);
   color: var(--text);
   cursor: pointer;
@@ -364,7 +394,7 @@ label {
 }
 
 .back-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--btn-secondary-bg-hover);
 }
 
 /* ═══════════════════════════════════════════════
@@ -476,4 +506,34 @@ input[type="range"] {
   width: 100%;
   accent-color: var(--primary);
   cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════
+   Responsive Grid & Display Utilities
+   ═══════════════════════════════════════════════ */
+@media (min-width: 640px) {
+  .sm-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .md-flex {
+    display: flex !important;
+  }
+  .md-hidden {
+    display: none !important;
+  }
+  .md-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .md-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lg-inline {
+    display: inline !important;
+  }
 }

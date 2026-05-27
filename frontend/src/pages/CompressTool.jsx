@@ -1,12 +1,14 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
+import axios from '../services/api'
 import toast from 'react-hot-toast'
 import { ArrowLeft, FileArchive, Download, Upload } from 'lucide-react'
+import { useGuestLimit } from '../hooks/useGuestLimit'
 
 export default function CompressTool() {
     const nav = useNavigate()
+    const { checkAndConsume, GuestModal } = useGuestLimit('compress')
     const [file, setFile] = useState(null)
     const [targetKB, setTargetKB] = useState('100')
     const [loading, setLoading] = useState(false)
@@ -21,6 +23,7 @@ export default function CompressTool() {
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, maxFiles: 1 })
 
     async function handleCompress() {
+        if (!checkAndConsume()) return
         if (!file) return toast.error('Please select a file first')
         setLoading(true)
         try {
@@ -53,19 +56,19 @@ export default function CompressTool() {
             <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} style={{ marginBottom: 16 }}>
                 <input {...getInputProps()} />
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <Upload size={44} color="#f59e0b" style={{ opacity: 0.85 }} />
+                    <Upload size={44} color="var(--accent)" style={{ opacity: 0.85 }} />
                     {file ? (
                         <>
-                            <span style={{ fontWeight: 700, color: '#fff', fontSize: 15 }}>{file.name}</span>
-                            <span className="badge badge-amber">{Math.round(file.size / 1024)} KB original</span>
-                            <span style={{ fontSize: 12, color: '#475569' }}>Tap to change</span>
+                             <span style={{ fontWeight: 700, color: 'var(--text)', fontSize: 15 }}>{file.name}</span>
+                             <span className="badge badge-amber">{Math.round(file.size / 1024)} KB original</span>
+                             <span style={{ fontSize: 12, color: 'var(--muted)' }}>Tap to change</span>
                         </>
                     ) : (
                         <>
-                            <span style={{ color: '#94a3b8', fontSize: 15 }}>
+                            <span style={{ color: 'var(--muted)', fontSize: 15 }}>
                                 {isDragActive ? 'Drop file here' : 'Tap to upload image or PDF'}
                             </span>
-                            <span style={{ fontSize: 12, color: '#334155' }}>JPG, PNG, PDF – max 10MB</span>
+                             <span style={{ fontSize: 12, color: 'var(--muted)' }}>JPG, PNG, PDF – max 10MB</span>
                         </>
                     )}
                 </div>
@@ -81,7 +84,7 @@ export default function CompressTool() {
                             className={`option-pill ${targetKB === kb ? 'selected' : ''}`}
                             onClick={() => setTargetKB(kb)}
                             style={targetKB === kb ? {
-                                borderColor: '#f59e0b', background: 'rgba(245,158,11,0.15)', color: '#fbbf24'
+                                borderColor: 'var(--accent)', background: 'rgba(245,158,11,0.15)', color: 'var(--accent)'
                             } : {}}
                         >
                             <div style={{ fontSize: 16, fontWeight: 800 }}>{kb}</div>
@@ -95,7 +98,7 @@ export default function CompressTool() {
                 className="btn-primary"
                 onClick={handleCompress}
                 disabled={loading}
-                style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)' }}
+                style={{ background: 'linear-gradient(135deg, var(--accent), var(--danger))' }}
             >
                 {loading
                     ? <><span className="spin">◌</span> Compressing…</>
@@ -109,15 +112,15 @@ export default function CompressTool() {
                     {/* Before / after */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 14 }}>
                         <div style={{ flex: 1, textAlign: 'center' }}>
-                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>BEFORE</div>
-                            <div style={{ fontSize: 22, fontWeight: 800, color: '#f87171' }}>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>BEFORE</div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--danger)' }}>
                                 {result.originalSizeKB}<span style={{ fontSize: 13, fontWeight: 500, marginLeft: 2 }}>KB</span>
                             </div>
                         </div>
-                        <div style={{ color: '#334155', fontSize: 24, padding: '0 12px' }}>→</div>
+                         <div style={{ color: 'var(--text)', fontSize: 24, padding: '0 12px' }}>→</div>
                         <div style={{ flex: 1, textAlign: 'center' }}>
-                            <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>AFTER</div>
-                            <div style={{ fontSize: 22, fontWeight: 800, color: '#34d399' }}>
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>AFTER</div>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--success)' }}>
                                 {result.finalSizeKB}<span style={{ fontSize: 13, fontWeight: 500, marginLeft: 2 }}>KB</span>
                             </div>
                         </div>
@@ -149,6 +152,7 @@ export default function CompressTool() {
                     </a>
                 </div>
             )}
+            <GuestModal />
         </div>
     )
 }

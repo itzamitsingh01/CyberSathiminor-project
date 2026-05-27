@@ -6,12 +6,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/session': 'http://localhost:5000',
-      '/upload': 'http://localhost:5000',
-      '/passport': 'http://localhost:5000',
-      '/compress': 'http://localhost:5000',
-      '/pdf': 'http://localhost:5000',
-      '/signature': 'http://localhost:5000',
+      // All /api/* calls forwarded to backend (with cookies)
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      },
       '/files': 'http://localhost:5000',
     }
   }

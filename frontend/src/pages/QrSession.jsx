@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import axios from '../services/api'
 import toast from 'react-hot-toast'
 import { io } from 'socket.io-client'
 import { ArrowLeft, QrCode, FileText, Clock, Wifi, WifiOff, Download, Pause, Play, StopCircle } from 'lucide-react'

@@ -1,12 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import axios from 'axios'
 import './index.css'
 import App from './App.jsx'
 
-axios.defaults.baseURL = import.meta.env.MODE === 'production' 
-  ? 'https://cybersathi-0wqe.onrender.com/api' 
-  : 'http://localhost:5000/api';
+// Note: axios baseURL is now configured in services/api.js
+// All API calls should use that instance (not raw axios)
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
