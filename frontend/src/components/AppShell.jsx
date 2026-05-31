@@ -102,7 +102,7 @@ export default function AppShell() {
                 </div>
                 {!collapsed && (
                     <div>
-                        <div style={{ fontSize: '15px', fontWeight: 900, color: '#f1f5f9', letterSpacing: '-0.3px' }}>
+                        <div style={{ fontSize: '15px', fontWeight: 900, color: 'var(--sidebar-text)', letterSpacing: '-0.3px' }}>
                             CyberSathi
                         </div>
                         <div style={{ fontSize: '9px', color: '#818cf8', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
@@ -122,7 +122,7 @@ export default function AppShell() {
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between'
                     }}>
                         <div>
-                            <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                            <div style={{ fontSize: '10px', color: 'var(--sidebar-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
                                 Plan
                             </div>
                             <div style={{ fontSize: '13px', fontWeight: 800, marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -133,7 +133,7 @@ export default function AppShell() {
                                 ) : isLoggedIn ? (
                                     <span style={{ color: '#a5b4fc' }}>Free Tier</span>
                                 ) : (
-                                    <span style={{ color: '#94a3b8' }}>Guest Mode</span>
+                                    <span style={{ color: 'var(--sidebar-muted)' }}>Guest Mode</span>
                                 )}
                             </div>
                         </div>
@@ -159,7 +159,7 @@ export default function AppShell() {
                     <div key={section.label} style={{ marginBottom: '4px' }}>
                         {!collapsed && (
                             <div style={{
-                                fontSize: '10px', fontWeight: 700, color: 'rgba(148,163,184,0.6)',
+                                fontSize: '10px', fontWeight: 700, color: 'var(--sidebar-muted)',
                                 letterSpacing: '1.2px', padding: '10px 10px 6px',
                                 textTransform: 'uppercase'
                             }}>
@@ -199,13 +199,13 @@ export default function AppShell() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         <Icon
                                             size={17}
-                                            color={active ? '#fff' : '#94a3b8'}
+                                            color={active ? '#fff' : 'var(--sidebar-muted)'}
                                             style={{ flexShrink: 0 }}
                                         />
                                         {!collapsed && (
                                             <span style={{
                                                 fontSize: '13.5px', fontWeight: active ? 700 : 500,
-                                                color: active ? '#fff' : '#94a3b8',
+                                                color: active ? '#fff' : 'var(--sidebar-muted)',
                                                 whiteSpace: 'nowrap'
                                             }}>
                                                 {item.label}
@@ -250,10 +250,10 @@ export default function AppShell() {
                                     {(user?.name || 'U').charAt(0).toUpperCase()}
                                 </div>
                                 <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--sidebar-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {user?.name || 'User'}
                                     </div>
-                                    <div style={{ fontSize: '10.5px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <div style={{ fontSize: '10.5px', color: 'var(--sidebar-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {user?.email || ''}
                                     </div>
                                 </div>

@@ -11,51 +11,78 @@
  *   /forgot-password      → ForgotPasswordPage
  *   /upload/:sessionId    → MobileUpload
  *   (layout: AppShell)
- *     /dashboard          → Home
- *     /passport           → PassportTool
- *     /compress           → CompressTool
- *     /pdf                → PdfTools
- *     /signature          → SignatureTool
- *     /qr-session         → QrSession (auth-gated)
- *     /pricing            → SubscriptionPage
- *     /about              → About
- *     /help               → Help
+ *     /dashboard          → Home (lazy)
+ *     /passport           → PassportTool (lazy)
+ *     /compress           → CompressTool (lazy)
+ *     /pdf                → PdfTools (lazy)
+ *     /signature          → SignatureTool (lazy)
+ *     /qr-session         → QrSession (auth-gated, lazy)
+ *     /pricing            → SubscriptionPage (lazy)
+ *     /about              → About (lazy)
+ *     /help               → Help (lazy)
  *     *                   → redirect /dashboard
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { Suspense, lazy } from 'react'
 import './index.css'
 
 import { LanguageProvider }  from './LanguageContext'
 import { ThemeProvider }     from './ThemeContext'
 import AuthHydrator          from './components/AuthHydrator'
+import useAuthStore          from './store/authStore'
 
-// Public pages
+// Public pages (eager — needed for initial load)
 import LandingPage        from './pages/LandingPage'
 import LoginPage          from './pages/auth/LoginPage'
 import RegisterPage       from './pages/auth/RegisterPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import MobileUpload       from './pages/MobileUpload'
-
-// App shell layout (renders <Outlet />, no nested <Routes>)
 import AppShell           from './components/AppShell'
 
-// Dashboard pages (rendered inside AppShell via <Outlet />)
-import Home               from './pages/Home'
-import PassportTool       from './pages/PassportTool'
-import CompressTool       from './pages/CompressTool'
-import PdfTools           from './pages/PdfTools'
-import SignatureTool      from './pages/SignatureTool'
-import QrSession          from './pages/QrSession'
-import SubscriptionPage   from './pages/SubscriptionPage'
-import About              from './pages/About'
-import Help               from './pages/Help'
+// Dashboard pages — lazy loaded to reduce initial bundle (P-1)
+const Home             = lazy(() => import('./pages/Home'))
+const PassportTool     = lazy(() => import('./pages/PassportTool'))
+const CompressTool     = lazy(() => import('./pages/CompressTool'))
+const PdfTools         = lazy(() => import('./pages/PdfTools'))
+const SignatureTool    = lazy(() => import('./pages/SignatureTool'))
+const QrSession        = lazy(() => import('./pages/QrSession'))
+const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'))
+const About            = lazy(() => import('./pages/About'))
+const Help             = lazy(() => import('./pages/Help'))
 
-// Auth guard for QR session (requires login)
-import { useAuth } from './hooks/useAuth'
+/** Minimal spinner shown while lazy chunks load */
+function PageLoader() {
+    return (
+        <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: '60vh', flexDirection: 'column', gap: 12,
+        }}>
+            <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                border: '3px solid var(--border)',
+                borderTopColor: 'var(--primary)',
+                animation: 'spin 0.7s linear infinite',
+            }} />
+            <span style={{ color: 'var(--muted)', fontSize: 13 }}>Loading…</span>
+        </div>
+    )
+}
+
+/**
+ * Auth guard for QR session (requires login).
+ * Waits for isHydrated so a valid refresh cookie isn't
+ * mistakenly redirected during the async /auth/me call. (C-4 fix)
+ */
 function AuthOnlyRoute({ children }) {
-    const { isLoggedIn } = useAuth()
-    if (!isLoggedIn) return <Navigate to="/register" state={{ from: { pathname: '/qr-session' } }} replace />
+    const { isLoggedIn, isHydrated } = useAuthStore()
+
+    // Still waiting for hydration — show spinner instead of redirecting
+    if (!isHydrated) return <PageLoader />
+
+    if (!isLoggedIn) {
+        return <Navigate to="/register" state={{ from: { pathname: '/qr-session' } }} replace />
+    }
     return children
 }
 
@@ -90,18 +117,22 @@ function App() {
 
                             {/* ── Dashboard layout (AppShell = layout, no path) ── */}
                             {/* All children render into AppShell's <Outlet /> */}
-                            <Route element={<AppShell />}>
-                                <Route path="/dashboard"  element={<Home />} />
-                                <Route path="/passport"   element={<PassportTool />} />
-                                <Route path="/compress"   element={<CompressTool />} />
-                                <Route path="/pdf"        element={<PdfTools />} />
-                                <Route path="/signature"  element={<SignatureTool />} />
-                                <Route path="/qr-session" element={
-                                    <AuthOnlyRoute><QrSession /></AuthOnlyRoute>
-                                } />
-                                <Route path="/pricing"    element={<SubscriptionPage />} />
-                                <Route path="/about"      element={<About />} />
-                                <Route path="/help"       element={<Help />} />
+                            <Route element={<Suspense fallback={<PageLoader />}>
+      <AppShell />
+    </Suspense>}>
+                                {/* <Suspense fallback={<PageLoader />}> */}
+                                    <Route path="/dashboard"  element={<Home />} />
+                                    <Route path="/passport"   element={<PassportTool />} />
+                                    <Route path="/compress"   element={<CompressTool />} />
+                                    <Route path="/pdf"        element={<PdfTools />} />
+                                    <Route path="/signature"  element={<SignatureTool />} />
+                                    <Route path="/qr-session" element={
+                                        <AuthOnlyRoute><QrSession /></AuthOnlyRoute>
+                                    } />
+                                    <Route path="/pricing"    element={<SubscriptionPage />} />
+                                    <Route path="/about"      element={<About />} />
+                                    <Route path="/help"       element={<Help />} />
+                                {/* </Suspense> */}
                             </Route>
 
                             {/* ── Fallback ── */}

@@ -38,12 +38,16 @@ const userSchema = new mongoose.Schema(
 
         // ── Email verification ──────────────────────────────
         isVerified: { type: Boolean, default: false },
-        emailOtp: String,                 // 6-digit OTP
+        emailOtpHash: String,             // bcrypt hash of 6-digit OTP
         emailOtpExpiry: Date,             // OTP valid for 10 min
+        emailOtpAttempts: { type: Number, default: 0 },
+        emailOtpLockedUntil: Date,        // brute-force lock
 
         // ── Password reset ──────────────────────────────────
-        resetOtp: String,
+        resetOtpHash: String,             // bcrypt hash of reset OTP
         resetOtpExpiry: Date,
+        resetOtpAttempts: { type: Number, default: 0 },
+        resetOtpLockedUntil: Date,
 
         // ── Subscription ────────────────────────────────────
         subscription: {
@@ -70,7 +74,6 @@ const userSchema = new mongoose.Schema(
 userSchema.pre('save', async function () {
     if (!this.isModified('passwordHash')) return;
     this.passwordHash = await bcrypt.hash(this.passwordHash, 12);
-   
 });
 
 // Compare plain password with hash
@@ -78,15 +81,49 @@ userSchema.methods.matchPassword = function (plain) {
     return bcrypt.compare(plain, this.passwordHash);
 };
 
+// Verify a plain OTP against stored hash
+userSchema.methods.matchEmailOtp = function (plain) {
+    if (!this.emailOtpHash) return Promise.resolve(false);
+    return bcrypt.compare(plain, this.emailOtpHash);
+};
+
+userSchema.methods.matchResetOtp = function (plain) {
+    if (!this.resetOtpHash) return Promise.resolve(false);
+    return bcrypt.compare(plain, this.resetOtpHash);
+};
+
+/**
+ * Check if subscription is still active; auto-downgrade if expired.
+ * Returns true if currently premium.
+ */
+userSchema.methods.checkSubscription = function () {
+    if (this.subscription.plan === 'premium' && this.subscription.endDate) {
+        if (new Date() > new Date(this.subscription.endDate)) {
+            // Expired — downgrade (caller must save)
+            this.subscription.plan = 'free';
+            this.role = 'free';
+            return false;
+        }
+        return true;
+    }
+    return this.subscription.plan === 'premium';
+};
+
 // Safe public object (no hashes)
 userSchema.methods.toPublic = function () {
+    // Check and auto-downgrade expired subscription before returning
+    const isPremium = this.checkSubscription();
     return {
         id: this._id,
         name: this.name,
         email: this.email,
         role: this.role,
         isVerified: this.isVerified,
-        subscription: this.subscription,
+        subscription: {
+            plan: this.subscription.plan,
+            startDate: this.subscription.startDate,
+            endDate: this.subscription.endDate,
+        },
         usage: this.usage,
         mobile: this.mobile,
         userType: this.userType,

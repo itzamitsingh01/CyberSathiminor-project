@@ -6,6 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const authRoutes      = require('./routes/auth.routes');
 const sessionRoutes   = require('./routes/session.routes');
@@ -41,14 +42,71 @@ app.use(express.urlencoded({ extended: true }));
 // Serve uploaded files statically
 app.use('/files', express.static(path.join(__dirname, '..', 'uploads')));
 
+// ── Rate Limiters ─────────────────────────────────────────────────
+
+// Auth endpoints — strict: 10 requests per 15 minutes
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,   // 15 minutes
+    max: 10,
+    message: { success: false, message: 'Too many requests. Please wait 15 minutes and try again.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: false,
+});
+
+// OTP endpoints — very strict: 5 per 10 minutes
+const otpLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 5,
+    message: { success: false, message: 'Too many OTP attempts. Please wait 10 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Tool endpoints — moderate: 30 per minute per IP
+const toolLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: { success: false, message: 'Too many requests. Please slow down.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+});
+
+// Upload endpoint — 20 per minute
+const uploadLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    message: { success: false, message: 'Too many uploads. Please wait a moment.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Session create — 10 per hour per IP (prevent flooding)
+const sessionLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { success: false, message: 'Too many sessions created. Please wait.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 // ── Routes ───────────────────────────────────────────────────────
+// Apply rate limits to auth routes selectively
+app.use('/api/auth/login',           authLimiter);
+app.use('/api/auth/register',        authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/verify-email',    otpLimiter);
+app.use('/api/auth/resend-otp',      otpLimiter);
+
 app.use('/api/auth',      authRoutes);
+app.use('/api/session/create', sessionLimiter);
 app.use('/api/session',   sessionRoutes);
-app.use('/api/upload',    uploadRoutes);
-app.use('/api/passport',  passportRoutes);
-app.use('/api/compress',  compressRoutes);
-app.use('/api/pdf',       pdfRoutes);
-app.use('/api/signature', signatureRoutes);
+app.use('/api/upload',    uploadLimiter, uploadRoutes);
+app.use('/api/passport',  toolLimiter, passportRoutes);
+app.use('/api/compress',  toolLimiter, compressRoutes);
+app.use('/api/pdf',       toolLimiter, pdfRoutes);
+app.use('/api/signature', toolLimiter, signatureRoutes);
 
 // Health check
 app.get('/', (_req, res) => res.json({ status: 'ok', app: 'CyberSathi Backend' }));
@@ -56,6 +114,10 @@ app.get('/', (_req, res) => res.json({ status: 'ok', app: 'CyberSathi Backend' }
 // Global Error Handler
 app.use((err, req, res, _next) => {
     console.error('Unhandled Error:', err.message);
+    // Multer file type error
+    if (err.message && err.message.startsWith('File type not allowed')) {
+        return res.status(400).json({ success: false, message: err.message });
+    }
     res.status(500).json({ success: false, message: err.message || 'Internal Server Error' });
 });
 

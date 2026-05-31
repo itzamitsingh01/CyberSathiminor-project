@@ -1,62 +1,84 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import axios from '../services/api'
 import toast from 'react-hot-toast'
 import { io } from 'socket.io-client'
-import { ArrowLeft, QrCode, FileText, Clock, Wifi, WifiOff, Download, Pause, Play, StopCircle } from 'lucide-react'
+import {
+    ArrowLeft, QrCode, FileText, Clock, Wifi, WifiOff,
+    Download, Pause, Play, StopCircle, Printer, Copy,
+    CheckCircle2, ExternalLink,
+} from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
+
+/* ── Print a single image URL in a hidden iframe ── */
+function printFileUrl(url, filename) {
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
+    document.body.appendChild(iframe)
+    iframe.contentDocument.write(`
+        <html>
+          <head>
+            <title>${filename || 'Print'}</title>
+            <style>
+              @page { size: auto; margin: 8mm; }
+              body { margin:0; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#fff; }
+              img { max-width:100%; max-height:100%; object-fit:contain; }
+            </style>
+          </head>
+          <body><img src="${url}" onload="window.focus();window.print();" /></body>
+        </html>`)
+    setTimeout(() => document.body.removeChild(iframe), 15000)
+}
+
+/* ── Copy text to clipboard ── */
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => toast.success('Link copied!')).catch(() => toast.error('Copy failed'))
+}
 
 export default function QrSession() {
     const nav = useNavigate()
+    const [searchParams] = useSearchParams()
     const { t } = useLanguage()
-    const [toolType, setToolType] = useState('passport')
-    const [session, setSession] = useState(null)
-    const [loading, setLoading] = useState(false)
-    const [files, setFiles] = useState([])
-    const [timeLeft, setTimeLeft] = useState(600)
+
+    // Read toolType from URL query (?tool=passport) — default 'passport'
+    const defaultTool = searchParams.get('tool') || 'passport'
+
+    const [session,   setSession]   = useState(null)
+    const [loading,   setLoading]   = useState(false)
+    const [files,     setFiles]     = useState([])
+    const [timeLeft,  setTimeLeft]  = useState(600)
     const [connected, setConnected] = useState(false)
-    const [isPaused, setIsPaused] = useState(false)
-    
-    const socketRef = useRef(null)
-    const timerRef = useRef(null)
+    const [isPaused,  setIsPaused]  = useState(false)
+    const [hoveredFile, setHoveredFile] = useState(null)
+
+    const socketRef   = useRef(null)
+    const timerRef    = useRef(null)
     const isPausedRef = useRef(false)
 
-    useEffect(() => {
-        isPausedRef.current = isPaused
-    }, [isPaused])
+    useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
 
-    const TOOL_TYPES = [
-        { id: 'passport', label: `📸 ${t.tool_passport}`, color: '#4f46e5' },
-        { id: 'compress', label: `📦 ${t.tool_compress}`, color: '#f59e0b' },
-        { id: 'pdf', label: `📄 ${t.tool_pdf}`, color: '#10b981' },
-        { id: 'signature', label: `✍️ ${t.tool_signature}`, color: '#ec4899' },
-    ]
-
-    // Countdown
+    // ── Countdown ──────────────────────────────────────────────────────────
     useEffect(() => {
         if (!session) return
         timerRef.current = setInterval(() => {
-            if (isPausedRef.current) return; // Skip decrement if paused
-            
-            setTimeLeft((t) => {
-                if (t <= 1) { clearInterval(timerRef.current); handleEnd(); return 0 }
-                return t - 1
+            if (isPausedRef.current) return
+            setTimeLeft(prev => {
+                if (prev <= 1) { clearInterval(timerRef.current); handleEnd(); return 0 }
+                return prev - 1
             })
         }, 1000)
         return () => clearInterval(timerRef.current)
     }, [session])
 
     function connectSocket(sessionId) {
-        // Use production URL if not localhost
-        const socketUrl = import.meta.env.MODE === 'production' 
-            ? 'https://cybersathi-0wqe.onrender.com' 
-            : window.location.origin.includes('5173') ? 'http://localhost:5000' : window.location.origin;
+        const socketUrl = import.meta.env.MODE === 'production'
+            ? 'https://cybersathi-0wqe.onrender.com'
+            : window.location.origin.includes('5173') ? 'http://localhost:5000' : window.location.origin
 
         const socket = io(socketUrl)
-        socket.on('connect', () => { 
-            setConnected(true); 
-            socket.emit('join-session', sessionId) 
-            // If backend restarted, session might be gone from memory
+        socket.on('connect', () => {
+            setConnected(true)
+            socket.emit('join-session', sessionId)
             axios.get(`/session/${sessionId}`).catch(() => {
                 toast.error('Session expired or lost. Please generate a new QR.')
                 handleEnd()
@@ -64,7 +86,7 @@ export default function QrSession() {
         })
         socket.on('disconnect', () => setConnected(false))
         socket.on('file-uploaded', (data) => {
-            setFiles((prev) => [data.file, ...prev])
+            setFiles(prev => [data.file, ...prev])
             toast.success(`📁 ${data.file.originalname} received!`)
         })
         socketRef.current = socket
@@ -73,15 +95,15 @@ export default function QrSession() {
     async function handleCreate() {
         setLoading(true)
         try {
-            const frontendUrl = window.location.origin;
-            const res = await axios.post('/session/create', { toolType, frontendUrl })
+            const frontendUrl = window.location.origin
+            const res = await axios.post('/session/create', { toolType: defaultTool, frontendUrl })
             const s = res.data.session
             setSession(s)
             setFiles([])
             setTimeLeft(600)
             setIsPaused(false)
             connectSocket(s.sessionId)
-            toast.success('Session created! Share the QR code.')
+            toast.success('QR session ready! Share it with your customer.')
         } catch { toast.error('Failed to create session') }
         finally { setLoading(false) }
     }
@@ -95,139 +117,316 @@ export default function QrSession() {
         setIsPaused(false)
     }
 
-    const mm = String(Math.floor(timeLeft / 60)).padStart(2, '0')
-    const ss = String(timeLeft % 60).padStart(2, '0')
+    const mm   = String(Math.floor(timeLeft / 60)).padStart(2, '0')
+    const ss   = String(timeLeft % 60).padStart(2, '0')
     const danger = timeLeft < 60
+    const timerColor = isPaused ? '#f59e0b' : danger ? '#ef4444' : '#10b981'
 
     return (
-        <div className="page">
+        <div className="page" style={{ maxWidth: 640, margin: '0 auto' }}>
+
+            {/* Header */}
             <div className="back-header">
-                <button className="back-btn" onClick={() => { handleEnd(); nav('/') }}><ArrowLeft size={18} /></button>
+                <button className="back-btn" onClick={() => { handleEnd(); nav('/dashboard') }}>
+                    <ArrowLeft size={18} />
+                </button>
                 <div>
-                    <div className="page-title">{t.qr_title}</div>
-                    <div className="page-sub">{t.qr_sub}</div>
+                    <div className="page-title">QR Upload Session</div>
+                    <div className="page-sub">
+                        {session ? 'Session active — waiting for uploads' : 'Generate a QR code for customers to upload files'}
+                    </div>
                 </div>
             </div>
 
             {!session ? (
-                /* ── Session creation ─────────────────────────── */
-                <>
-                    <span className="section-label" style={{ display: 'block', marginBottom: 12 }}>
-                        Select the service type
-                    </span>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
-                        {TOOL_TYPES.map((tool) => (
-                            <button key={tool.id} onClick={() => setToolType(tool.id)}
-                                style={{
-                                    padding: '16px 12px', borderRadius: 14, border: '1.5px solid',
-                                    borderColor: toolType === tool.id ? tool.color : 'var(--border)',
-                                    background: toolType === tool.id ? `${tool.color}15` : 'rgba(0,0,0,0.02)',
-                                    color: toolType === tool.id ? tool.color : 'var(--muted)',
-                                    fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                                    transition: 'all 0.18s', fontFamily: 'inherit',
-                                }}>
-                                {tool.label}
-                            </button>
+                /* ── Create session — NO tool selection step ──────────────── */
+                <div style={{
+                    background: 'var(--card)', border: '1px solid var(--border)',
+                    borderRadius: 20, padding: 32, textAlign: 'center',
+                }}>
+                    <div style={{
+                        width: 80, height: 80, borderRadius: 24,
+                        background: 'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.15))',
+                        border: '2px solid rgba(99,102,241,0.2)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 20px',
+                    }}>
+                        <QrCode size={38} color="#6366f1" />
+                    </div>
+
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 8 }}>
+                        Ready to receive files
+                    </div>
+                    <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: 28, lineHeight: 1.6, maxWidth: 360, margin: '0 auto 28px' }}>
+                        Click generate to create a QR code. Your customer scans it and uploads a file instantly — no app needed.
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+                        {['📸 Passport', '📄 PDF', '📦 Images', '✍️ Signature'].map(tag => (
+                            <span key={tag} style={{
+                                padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                                background: 'var(--input-bg)', color: 'var(--muted)',
+                                border: '1px solid var(--border)',
+                            }}>{tag}</span>
                         ))}
                     </div>
 
-                    <button className="btn-primary" onClick={handleCreate} disabled={loading}
-                        style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)' }}>
-                        {loading ? <><span className="spin">◌</span> Creating…</> : <><QrCode size={18} /> {t.qr_generate}</>}
+                    <button
+                        className="btn-primary"
+                        onClick={handleCreate}
+                        disabled={loading}
+                        style={{ background: 'linear-gradient(135deg,#4f46e5,#7c3aed)', maxWidth: 300, margin: '0 auto' }}
+                    >
+                        {loading
+                            ? <><span className="spin">◌</span> Creating…</>
+                            : <><QrCode size={18} /> Generate QR Code</>
+                        }
                     </button>
-                </>
+                </div>
             ) : (
-                /* ── Active session ───────────────────────────── */
+                /* ── Active session ──────────────────────────────────────── */
                 <>
-                    {/* Status bar */}
+                    {/* ── Status bar ── */}
                     <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '10px 14px', borderRadius: 12, marginBottom: 20,
-                        background: isPaused ? 'rgba(245,158,11,0.08)' : (danger ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)'),
-                        border: `1px solid ${isPaused ? 'rgba(245,158,11,0.25)' : (danger ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)')}`,
+                        padding: '12px 16px', borderRadius: 14, marginBottom: 18,
+                        background: isPaused ? 'rgba(245,158,11,0.08)' : danger ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)',
+                        border: `1px solid ${isPaused ? 'rgba(245,158,11,0.25)' : danger ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             {connected
                                 ? <Wifi size={15} color="#10b981" />
                                 : <WifiOff size={15} color="#ef4444" />}
-                            <span style={{ fontSize: 13, fontWeight: 600, color: connected ? '#10b981' : '#ef4444' }}>
-                                {connected ? 'Live' : 'Connecting…'}
+                            <span style={{ fontSize: 13, fontWeight: 700, color: connected ? '#10b981' : '#ef4444' }}>
+                                {connected ? 'Live' : 'Reconnecting…'}
                             </span>
-                            <span style={{ fontSize: 12, color: 'var(--muted)' }}>· {files.length} file{files.length !== 1 ? 's' : ''}</span>
+                            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                                · {files.length} file{files.length !== 1 ? 's' : ''} received
+                            </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: isPaused ? '#f59e0b' : (danger ? '#ef4444' : 'var(--muted)'), fontFamily: 'monospace', fontWeight: 700, fontSize: 15 }}>
-                            <Clock size={14} />{mm}:{ss} {isPaused && '(Paused)'}
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            color: timerColor, fontFamily: 'monospace',
+                            fontWeight: 800, fontSize: 18,
+                        }}>
+                            <Clock size={14} />
+                            {mm}:{ss}
+                            {isPaused && <span style={{ fontSize: 11, fontWeight: 600, marginLeft: 4 }}>(paused)</span>}
                         </div>
                     </div>
 
-                    {/* QR */}
-                    <div style={{ textAlign: 'center', marginBottom: 22 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', marginBottom: 12 }}>
-                            {t.qr_show}
+                    {/* ── QR Code display ── */}
+                    <div style={{
+                        background: 'var(--card)', border: '1px solid var(--border)',
+                        borderRadius: 20, padding: 24, marginBottom: 16, textAlign: 'center',
+                    }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)', marginBottom: 14 }}>
+                            Show this QR to your customer
                         </div>
-                        <div style={{ display: 'inline-block', padding: 14, background: '#fff', borderRadius: 18, border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.05)' }}>
-                            <img src={session.qrDataUrl} alt="QR" style={{ width: 200, height: 200, display: 'block' }} />
+                        <div style={{
+                            display: 'inline-block', padding: 16,
+                            background: '#fff', borderRadius: 18,
+                            border: '3px solid rgba(99,102,241,0.15)',
+                            boxShadow: '0 12px 48px rgba(0,0,0,0.1)',
+                        }}>
+                            <img src={session.qrDataUrl} alt="QR Code" style={{ width: 220, height: 220, display: 'block' }} />
                         </div>
-                        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, wordBreak: 'break-all' }}>
-                            {session.uploadUrl}
+
+                        <div style={{
+                            marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        }}>
+                            <span style={{
+                                fontSize: 11, color: 'var(--muted)',
+                                maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>{session.uploadUrl}</span>
+                            <button
+                                onClick={() => copyText(session.uploadUrl)}
+                                style={{
+                                    padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                                    background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
+                                    color: '#6366f1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <Copy size={12} /> Copy
+                            </button>
                         </div>
+                    </div>
+
+                    {/* ── Controls ── */}
+                    <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                        <button
+                            className="btn-secondary"
+                            style={{
+                                flex: 1, padding: '11px',
+                                color: isPaused ? '#10b981' : '#f59e0b',
+                                borderColor: isPaused ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)',
+                            }}
+                            onClick={() => setIsPaused(v => !v)}
+                        >
+                            {isPaused ? <><Play size={16} /> Resume</> : <><Pause size={16} /> Pause Timer</>}
+                        </button>
+                        <button className="btn-danger" style={{ flex: 1, padding: '11px' }} onClick={handleEnd}>
+                            <StopCircle size={16} /> End Session
+                        </button>
                     </div>
 
                     <div className="divider" />
 
-                    {/* Controls */}
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '24px' }}>
-                        <button 
-                            className="btn-secondary" 
-                            style={{ flex: 1, padding: '10px', color: isPaused ? '#10b981' : '#f59e0b', borderColor: isPaused ? 'rgba(16,185,129,0.3)' : 'rgba(245,158,11,0.3)' }}
-                            onClick={() => setIsPaused(!isPaused)}>
-                            {isPaused ? <><Play size={16}/> {t.qr_resume}</> : <><Pause size={16}/> {t.qr_pause}</>}
-                        </button>
-                        <button 
-                            className="btn-danger" 
-                            style={{ flex: 1, padding: '10px' }}
-                            onClick={handleEnd}>
-                            <StopCircle size={16} /> {t.qr_stop}
-                        </button>
-                    </div>
-
-                    {/* Files */}
-                    <div style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', marginBottom: 10 }}>
-                            Received Files <span style={{ color: 'var(--muted)' }}>({files.length})</span>
+                    {/* ── Received files list ── */}
+                    <div style={{ marginBottom: 8 }}>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            marginBottom: 12,
+                        }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                                Received Files
+                            </div>
+                            {files.length > 0 && (
+                                <span style={{
+                                    padding: '2px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700,
+                                    background: 'rgba(16,185,129,0.1)', color: '#10b981',
+                                    border: '1px solid rgba(16,185,129,0.2)',
+                                }}>
+                                    <CheckCircle2 size={11} style={{ display: 'inline', marginRight: 4 }} />
+                                    {files.length} file{files.length !== 1 ? 's' : ''}
+                                </span>
+                            )}
                         </div>
+
                         {files.length === 0 ? (
                             <div style={{
-                                textAlign: 'center', padding: '32px 20px',
-                                color: 'var(--muted)', fontSize: 14, borderRadius: 14,
-                                background: 'rgba(0,0,0,0.02)', border: '1px dashed var(--border)',
+                                textAlign: 'center', padding: '44px 20px',
+                                color: 'var(--muted)', fontSize: 14, borderRadius: 16,
+                                background: 'var(--input-bg)', border: '1.5px dashed var(--border)',
                             }}>
-                                Waiting for uploads…
+                                <QrCode size={40} style={{ opacity: 0.25, marginBottom: 12 }} />
+                                <div>Waiting for customer uploads…</div>
+                                <div style={{ fontSize: 12, marginTop: 6, opacity: 0.7 }}>Files will appear here in real-time</div>
                             </div>
                         ) : (
-                            files.map((f, i) => {
-                                const isImg = f.mimetype?.startsWith('image/')
-                                return (
-                                    <div key={i} className="file-item">
-                                        {isImg
-                                            ? <img src={f.url} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8 }} />
-                                            : <FileText size={22} color="var(--primary)" />
-                                        }
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {f.originalname}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {files.map((f, i) => {
+                                    const isImg = f.mimetype?.startsWith('image/')
+                                    const isHovered = hoveredFile === i
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="file-item"
+                                            style={{
+                                                position: 'relative',
+                                                cursor: 'default',
+                                                transition: 'all 0.2s',
+                                                borderColor: isHovered ? 'rgba(99,102,241,0.35)' : undefined,
+                                                background: isHovered ? 'rgba(99,102,241,0.04)' : undefined,
+                                            }}
+                                            onMouseEnter={() => setHoveredFile(i)}
+                                            onMouseLeave={() => setHoveredFile(null)}
+                                        >
+                                            {/* Thumbnail */}
+                                            {isImg
+                                                ? <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} />
+                                                : <div style={{
+                                                    width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                                                    background: 'rgba(99,102,241,0.1)', display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center',
+                                                }}>
+                                                    <FileText size={20} color="var(--primary)" />
+                                                </div>
+                                            }
+
+                                            {/* Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    fontSize: 13, fontWeight: 600, color: 'var(--text)',
+                                                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                                }}>
+                                                    {f.originalname}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                                                    {Math.round(f.size / 1024)} KB · {new Date(f.uploadedAt).toLocaleTimeString()}
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                                                {Math.round(f.size / 1024)}KB · {new Date(f.uploadedAt).toLocaleTimeString()}
+
+                                            {/* Action buttons (always visible on mobile, hover on desktop) */}
+                                            <div style={{
+                                                display: 'flex', gap: 6, flexShrink: 0,
+                                                opacity: isHovered ? 1 : 0.35,
+                                                transition: 'opacity 0.18s',
+                                            }}>
+                                                {/* Download */}
+                                                <a
+                                                    href={f.url}
+                                                    download={f.originalname}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title="Download"
+                                                    style={{
+                                                        width: 34, height: 34, borderRadius: 10,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        background: 'rgba(99,102,241,0.1)', color: '#6366f1',
+                                                        border: '1px solid rgba(99,102,241,0.2)',
+                                                        textDecoration: 'none', transition: 'all 0.15s',
+                                                    }}
+                                                    onClick={e => e.stopPropagation()}
+                                                >
+                                                    <Download size={14} />
+                                                </a>
+
+                                                {/* Print */}
+                                                {isImg && (
+                                                    <button
+                                                        title="Print this file"
+                                                        onClick={() => printFileUrl(f.url, f.originalname)}
+                                                        style={{
+                                                            width: 34, height: 34, borderRadius: 10,
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            background: 'rgba(16,185,129,0.1)', color: '#10b981',
+                                                            border: '1px solid rgba(16,185,129,0.2)',
+                                                            cursor: 'pointer', transition: 'all 0.15s',
+                                                        }}
+                                                    >
+                                                        <Printer size={14} />
+                                                    </button>
+                                                )}
+
+                                                {/* Open */}
+                                                <a
+                                                    href={f.url}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title="Open in new tab"
+                                                    style={{
+                                                        width: 34, height: 34, borderRadius: 10,
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        background: 'var(--input-bg)', color: 'var(--muted)',
+                                                        border: '1px solid var(--border)',
+                                                        textDecoration: 'none', transition: 'all 0.15s',
+                                                    }}
+                                                    onClick={e => e.stopPropagation()}
+                                                >
+                                                    <ExternalLink size={13} />
+                                                </a>
                                             </div>
+
+                                            {/* Hover label — Print hint — mobile-friendly floating badge */}
+                                            {isHovered && isImg && (
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    bottom: -28, left: '50%', transform: 'translateX(-50%)',
+                                                    background: 'rgba(16,185,129,0.95)',
+                                                    color: '#fff', fontSize: 11, fontWeight: 700,
+                                                    padding: '3px 10px', borderRadius: 8,
+                                                    whiteSpace: 'nowrap', pointerEvents: 'none',
+                                                    zIndex: 10, display: 'flex', alignItems: 'center', gap: 4,
+                                                }}>
+                                                    <Printer size={11} /> Click 🖨️ to print
+                                                </div>
+                                            )}
                                         </div>
-                                        <a href={f.url} download={f.originalname} target="_blank" rel="noreferrer"
-                                            style={{ color: 'var(--primary)', fontSize: 13, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>
-                                            <Download size={15} />
-                                        </a>
-                                    </div>
-                                )
-                            })
+                                    )
+                                })}
+                            </div>
                         )}
                     </div>
                 </>

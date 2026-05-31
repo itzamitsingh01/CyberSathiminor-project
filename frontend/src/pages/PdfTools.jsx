@@ -107,7 +107,7 @@ export default function PdfTools() {
                 <input {...getInputProps()} />
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                     {tab === 'jpg-to-pdf' ? <Image size={38} color={currentTab.accent} /> : <FileText size={38} color={currentTab.accent} />}
-                    <span style={{ color: '#94a3b8', fontSize: 15 }}>
+                    <span style={{ color: 'var(--muted)', fontSize: 15 }}>
                         {isDragActive ? 'Drop here!' : tab === 'merge'
                             ? 'Upload PDFs (2 or more)'
                             : tab === 'jpg-to-pdf'

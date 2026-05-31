@@ -1,5 +1,10 @@
 /**
  * api.js – Axios instance with JWT interceptor + auto-refresh
+ *
+ * Security note: Access token is stored in localStorage for simplicity.
+ * On session expiry, we dispatch a custom event ("auth:session-expired")
+ * instead of doing window.location.href, so React can handle it gracefully
+ * (show modal, preserve state, etc.) without a hard navigation.
  */
 import axios from 'axios'
 
@@ -30,6 +35,12 @@ api.interceptors.response.use(
     (res) => res,
     async (error) => {
         const original = error.config
+
+        // Don't retry the refresh endpoint itself (avoids infinite loop)
+        if (original?.url?.includes('/auth/refresh')) {
+            return Promise.reject(error)
+        }
+
         if (error.response?.status === 401 && !original._retry) {
             if (isRefreshing) {
                 return new Promise((resolve, reject) => {
@@ -53,7 +64,9 @@ api.interceptors.response.use(
             } catch (err) {
                 processQueue(err, null)
                 localStorage.removeItem('cs_access_token')
-                window.location.href = '/login'
+                localStorage.removeItem('cs_user')
+                // Dispatch custom event — AppShell/AuthHydrator listens and navigates cleanly
+                window.dispatchEvent(new CustomEvent('auth:session-expired'))
                 return Promise.reject(err)
             } finally {
                 isRefreshing = false

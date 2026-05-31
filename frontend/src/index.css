@@ -11,19 +11,38 @@
   --accent: #f59e0b;
   --success: #10b981;
   --danger: #ef4444;
-  --bg: #f8fafc;
+
+  /* Light mode — strong contrast */
+  --bg: #f1f5f9;
+  --bg-2: #e8edf5;
   --card: #ffffff;
-  --border: #e2e8f0;
+  --card-2: #f8fafc;
+  --border: #cbd5e1;
   --text: #0f172a;
-  --muted: #64748b;
-  --input-bg: #f1f5f9;
+  --text-2: #1e293b;
+  --muted: #475569;
+  --input-bg: #f8fafc;
   --input-bg-focus: #ffffff;
-  --btn-secondary-bg: rgba(0, 0, 0, 0.03);
-  --btn-secondary-bg-hover: rgba(0, 0, 0, 0.06);
+  --btn-secondary-bg: rgba(0, 0, 0, 0.04);
+  --btn-secondary-bg-hover: rgba(0, 0, 0, 0.08);
   --file-item-bg: #f8fafc;
+
+  /* Sidebar — always dark (brand identity) */
   --sidebar-bg: #1e1b4b;
   --sidebar-text: #f1f5f9;
-  --sidebar-border: #312e81;
+  --sidebar-muted: #94a3b8;
+  --sidebar-border: #2e2a6b;
+
+  /* Nav — light mode */
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --nav-border: #e2e8f0;
+  --nav-text: #0f172a;
+  --nav-muted: #64748b;
+
+  /* Shadow scale */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .dark {
@@ -33,19 +52,38 @@
   --accent: #fbbf24;
   --success: #34d399;
   --danger: #f87171;
+
+  /* Dark mode */
   --bg: #090d16;
+  --bg-2: #0f1420;
   --card: #111827;
+  --card-2: #1a2235;
   --border: #1f2937;
   --text: #f9fafb;
-  --muted: #9ca3af;
+  --text-2: #e2e8f0;
+  --muted: #94a3b8;
   --input-bg: #1f2937;
   --input-bg-focus: #111827;
   --btn-secondary-bg: rgba(255, 255, 255, 0.05);
-  --btn-secondary-bg-hover: rgba(255, 255, 255, 0.08);
+  --btn-secondary-bg-hover: rgba(255, 255, 255, 0.09);
   --file-item-bg: #1f2937;
-  --sidebar-bg: #0c0f1d;
+
+  /* Sidebar — slightly deeper dark */
+  --sidebar-bg: #080c18;
   --sidebar-text: #f1f5f9;
-  --sidebar-border: #1e293b;
+  --sidebar-muted: #94a3b8;
+  --sidebar-border: #1a2235;
+
+  /* Nav — dark mode */
+  --nav-bg: rgba(9, 13, 22, 0.92);
+  --nav-border: #1f2937;
+  --nav-text: #f9fafb;
+  --nav-muted: #94a3b8;
+
+  /* Shadow scale */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.35);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.45);
 }
 
 /* ═══════════════════════════════════════════════
@@ -79,11 +117,19 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 60% 50% at 20% 10%, rgba(99, 102, 241, 0.05) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139, 92, 246, 0.04) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 30% at 60% 30%, rgba(245, 158, 11, 0.03) 0%, transparent 60%);
+    radial-gradient(ellipse 60% 50% at 20% 10%, rgba(99, 102, 241, 0.035) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139, 92, 246, 0.025) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 60% 30%, rgba(245, 158, 11, 0.02) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
+}
+/* Slightly more visible orb in dark mode */
+.dark body::before,
+.dark body::before {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 10%, rgba(99, 102, 241, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 60% 30%, rgba(245, 158, 11, 0.03) 0%, transparent 60%);
 }
 
 /* ═══════════════════════════════════════════════
@@ -311,7 +357,7 @@ label {
 .progress-wrap {
   height: 6px;
   border-radius: 99px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border);
   overflow: hidden;
   margin-top: 10px;
 }
@@ -452,7 +498,7 @@ label {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+  background: linear-gradient(90deg, var(--border) 25%, var(--card-2, var(--card)) 50%, var(--border) 75%);
   background-size: 800px;
   animation: shimmer 1.4s infinite;
   border-radius: 10px;
@@ -472,7 +518,8 @@ label {
 ═══════════════════════════════════════════════ */
 .tab-row {
   display: flex;
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 4px;
   gap: 4px;

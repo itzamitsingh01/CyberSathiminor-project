@@ -202,7 +202,7 @@
     left: 14px;
     top: 50%;
     transform: translateY(-50%);
-    color: #94a3b8;
+    color: var(--muted);
     display: flex;
     align-items: center;
     pointer-events: none;
@@ -246,7 +246,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: #94a3b8;
+    color: var(--muted);
     display: flex;
     align-items: center;
     padding: 2px;

@@ -1,11 +1,19 @@
 /**
  * auth.controller.js – Registration, OTP verify, Login, Refresh, Logout, Forgot/Reset Password
+ * Security hardening:
+ *  - OTPs stored as bcrypt hashes (not plaintext)
+ *  - OTP brute-force lock after 5 failed attempts (15 min)
+ *  - Subscription endDate auto-validated on /me
+ *  - Monthly usage reset on new month
  */
+const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { generateOtp, sendVerificationOtp, sendPasswordResetOtp } = require('../services/email.service');
 const { signAccess, signRefresh, verifyRefresh, setRefreshCookie, clearRefreshCookie } = require('../services/auth.service');
 
-const OTP_TTL = 10 * 60 * 1000; // 10 minutes
+const OTP_TTL = 10 * 60 * 1000;          // 10 minutes
+const OTP_LOCK_TTL = 15 * 60 * 1000;     // 15 min lockout after 5 bad guesses
+const OTP_MAX_ATTEMPTS = 5;
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/auth/register
@@ -26,13 +34,15 @@ async function register(req, res) {
 
         const otp = generateOtp();
         const otpExpiry = new Date(Date.now() + OTP_TTL);
+        const otpHash = await bcrypt.hash(otp, 10);  // hash OTP before storage
 
         if (existing && !existing.isVerified) {
-            // Resend OTP to unverified user
             existing.name = name;
             existing.passwordHash = password;   // pre-save hook re-hashes
-            existing.emailOtp = otp;
+            existing.emailOtpHash = otpHash;
             existing.emailOtpExpiry = otpExpiry;
+            existing.emailOtpAttempts = 0;
+            existing.emailOtpLockedUntil = undefined;
             existing.mobile = mobile || '';
             existing.userType = userType || '';
             existing.shopName = shopName || '';
@@ -44,7 +54,7 @@ async function register(req, res) {
                 name,
                 email,
                 passwordHash: password,
-                emailOtp: otp,
+                emailOtpHash: otpHash,
                 emailOtpExpiry: otpExpiry,
                 mobile: mobile || '',
                 userType: userType || '',
@@ -83,15 +93,35 @@ async function verifyEmail(req, res) {
         if (user.isVerified)
             return res.status(400).json({ success: false, message: 'Email already verified. Please login.' });
 
-        if (!user.emailOtp || user.emailOtp !== otp)
-            return res.status(400).json({ success: false, message: 'Invalid OTP. Please try again.' });
+        // Check brute-force lock
+        if (user.emailOtpLockedUntil && new Date() < new Date(user.emailOtpLockedUntil)) {
+            const waitMin = Math.ceil((new Date(user.emailOtpLockedUntil) - Date.now()) / 60000);
+            return res.status(429).json({ success: false, message: `Too many failed attempts. Try again in ${waitMin} minute(s).` });
+        }
 
-        if (Date.now() > new Date(user.emailOtpExpiry).getTime())
+        // Check OTP expiry
+        if (!user.emailOtpHash || !user.emailOtpExpiry || Date.now() > new Date(user.emailOtpExpiry).getTime())
             return res.status(400).json({ success: false, message: 'OTP has expired. Please register again to get a new OTP.' });
 
+        // Compare against hash
+        const otpMatch = await user.matchEmailOtp(otp);
+        if (!otpMatch) {
+            user.emailOtpAttempts = (user.emailOtpAttempts || 0) + 1;
+            if (user.emailOtpAttempts >= OTP_MAX_ATTEMPTS) {
+                user.emailOtpLockedUntil = new Date(Date.now() + OTP_LOCK_TTL);
+                await user.save();
+                return res.status(429).json({ success: false, message: 'Too many failed attempts. Account locked for 15 minutes.' });
+            }
+            const remaining = OTP_MAX_ATTEMPTS - user.emailOtpAttempts;
+            await user.save();
+            return res.status(400).json({ success: false, message: `Invalid OTP. ${remaining} attempt(s) remaining.` });
+        }
+
         user.isVerified = true;
-        user.emailOtp = undefined;
+        user.emailOtpHash = undefined;
         user.emailOtpExpiry = undefined;
+        user.emailOtpAttempts = 0;
+        user.emailOtpLockedUntil = undefined;
         await user.save();
 
         // Auto login after verification
@@ -118,19 +148,25 @@ async function verifyEmail(req, res) {
 async function resendOtp(req, res) {
     try {
         const { email } = req.body;
+        // Always respond OK even if email not found (prevent enumeration)
         const user = await User.findOne({ email: email?.toLowerCase() });
 
-        if (!user || user.isVerified)
-            return res.status(400).json({ success: false, message: 'Cannot resend OTP for this email.' });
+        if (!user || user.isVerified) {
+            // Don't reveal whether the account exists or is verified
+            return res.json({ success: true, message: 'If that email has a pending verification, a new OTP has been sent.' });
+        }
 
         const otp = generateOtp();
-        user.emailOtp = otp;
+        const otpHash = await bcrypt.hash(otp, 10);
+        user.emailOtpHash = otpHash;
         user.emailOtpExpiry = new Date(Date.now() + OTP_TTL);
+        user.emailOtpAttempts = 0;
+        user.emailOtpLockedUntil = undefined;
         await user.save();
 
         await sendVerificationOtp(email, user.name, otp);
 
-        return res.json({ success: true, message: 'New OTP sent to your email.' });
+        return res.json({ success: true, message: 'If that email has a pending verification, a new OTP has been sent.' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Failed to resend OTP.' });
     }
@@ -160,6 +196,10 @@ async function login(req, res) {
         const match = await user.matchPassword(password);
         if (!match)
             return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+
+        // Auto-downgrade expired subscription
+        const wasModified = user.checkSubscription();
+        if (!wasModified && user.isModified('subscription')) await user.save();
 
         const payload = { id: user._id, role: user.role };
         const accessToken = signAccess(payload);
@@ -191,6 +231,9 @@ async function refresh(req, res) {
         if (!user)
             return res.status(401).json({ success: false, message: 'User not found.' });
 
+        // Auto-downgrade expired subscription silently
+        user.checkSubscription();
+
         const accessToken = signAccess({ id: user._id, role: user.role });
         return res.json({ success: true, accessToken });
     } catch {
@@ -219,13 +262,16 @@ async function forgotPassword(req, res) {
             return res.json({ success: true, message: 'If that email exists, an OTP has been sent.' });
 
         const otp = generateOtp();
-        user.resetOtp = otp;
+        const otpHash = await bcrypt.hash(otp, 10);
+        user.resetOtpHash = otpHash;
         user.resetOtpExpiry = new Date(Date.now() + OTP_TTL);
+        user.resetOtpAttempts = 0;
+        user.resetOtpLockedUntil = undefined;
         await user.save();
 
         await sendPasswordResetOtp(email, user.name, otp);
 
-        return res.json({ success: true, message: 'Password reset OTP sent to your email.' });
+        return res.json({ success: true, message: 'If that email exists, an OTP has been sent.' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Failed to send reset OTP.' });
     }
@@ -244,18 +290,38 @@ async function resetPassword(req, res) {
             return res.status(400).json({ success: false, message: 'Password must be at least 6 characters.' });
 
         const user = await User.findOne({ email: email.toLowerCase() });
-        if (!user || !user.resetOtp)
+        if (!user || !user.resetOtpHash)
             return res.status(400).json({ success: false, message: 'No reset request found. Please try again.' });
 
-        if (user.resetOtp !== otp)
-            return res.status(400).json({ success: false, message: 'Invalid OTP.' });
+        // Check brute-force lock
+        if (user.resetOtpLockedUntil && new Date() < new Date(user.resetOtpLockedUntil)) {
+            const waitMin = Math.ceil((new Date(user.resetOtpLockedUntil) - Date.now()) / 60000);
+            return res.status(429).json({ success: false, message: `Too many failed attempts. Try again in ${waitMin} minute(s).` });
+        }
 
+        // Check expiry
         if (Date.now() > new Date(user.resetOtpExpiry).getTime())
             return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
 
+        // Compare against hash
+        const otpMatch = await user.matchResetOtp(otp);
+        if (!otpMatch) {
+            user.resetOtpAttempts = (user.resetOtpAttempts || 0) + 1;
+            if (user.resetOtpAttempts >= OTP_MAX_ATTEMPTS) {
+                user.resetOtpLockedUntil = new Date(Date.now() + OTP_LOCK_TTL);
+                await user.save();
+                return res.status(429).json({ success: false, message: 'Too many failed attempts. Locked for 15 minutes.' });
+            }
+            const remaining = OTP_MAX_ATTEMPTS - user.resetOtpAttempts;
+            await user.save();
+            return res.status(400).json({ success: false, message: `Invalid OTP. ${remaining} attempt(s) remaining.` });
+        }
+
         user.passwordHash = newPassword;  // pre-save hook re-hashes
-        user.resetOtp = undefined;
+        user.resetOtpHash = undefined;
         user.resetOtpExpiry = undefined;
+        user.resetOtpAttempts = 0;
+        user.resetOtpLockedUntil = undefined;
         await user.save();
 
         return res.json({ success: true, message: 'Password reset successfully! You can now log in.' });
@@ -271,6 +337,21 @@ async function getMe(req, res) {
     try {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+        // Auto-downgrade expired subscription + reset monthly usage if new month
+        let dirty = false;
+        const subscriptionChanged = user.checkSubscription();
+        if (user.isModified('subscription')) dirty = true;
+
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        if (user.usage.month && user.usage.month !== currentMonth) {
+            // New month — reset all usage counters
+            user.usage = { month: currentMonth, removeBg: 0, passport: 0, compress: 0, pdf: 0, signature: 0, qrSessions: 0 };
+            dirty = true;
+        }
+
+        if (dirty) await user.save();
+
         res.json({ success: true, user: user.toPublic() });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Failed to fetch user.' });
