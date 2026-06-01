@@ -13,7 +13,9 @@ async function createSession(req, res) {
     try {
         const { toolType = 'general', frontendUrl } = req.body;
         const baseUrl = frontendUrl || `${req.protocol}://${req.get('host')}`;
-        const session = await sessionService.createSession(toolType, baseUrl);
+
+        // Pass userId so the session is owned by the operator (M-4 fix)
+        const session = await sessionService.createSession(toolType, baseUrl, req.user.id);
 
         // Track QR session usage
         const currentMonth = new Date().toISOString().slice(0, 7);
@@ -24,6 +26,7 @@ async function createSession(req, res) {
 
         res.json({ success: true, session });
     } catch (err) {
+        console.error('createSession error:', err);
         res.status(500).json({ success: false, message: err.message });
     }
 }
@@ -31,13 +34,29 @@ async function createSession(req, res) {
 /**
  * GET /session/:id
  */
-function getSession(req, res) {
-    const session = sessionService.getSession(req.params.id);
-    if (!session) return res.status(404).json({ success: false, message: 'Session not found or expired' });
+async function getSession(req, res) {
+    try {
+        const session = await sessionService.getSession(req.params.id);
+        if (!session) return res.status(404).json({ success: false, message: 'Session not found or expired' });
 
-    // Return session but strip internal fields not needed by client
-    const { sessionId, toolType, uploadUrl, qrDataUrl, expiresAt, files } = session;
-    res.json({ success: true, session: { sessionId, toolType, uploadUrl, qrDataUrl, expiresAt, files } });
+        // Strip internal Mongo fields before returning
+        const { sessionId, toolType, uploadUrl, qrDataUrl, expiresAt, files } = session;
+        res.json({ success: true, session: { sessionId, toolType, uploadUrl, qrDataUrl, expiresAt, files } });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
 }
 
-module.exports = { createSession, getSession };
+/**
+ * DELETE /session/:id  (optional manual end)
+ */
+async function deleteSession(req, res) {
+    try {
+        await sessionService.expireSession(req.params.id);
+        res.json({ success: true, message: 'Session ended.' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+}
+
+module.exports = { createSession, getSession, deleteSession };

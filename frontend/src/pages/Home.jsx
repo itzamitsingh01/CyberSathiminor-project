@@ -102,12 +102,25 @@ export default function Home() {
 
     const metrics = getMetrics()
 
-    // Mock recent activity feed
-    const recentActivities = [
-        { title: 'Passport Photo Sheet Generated', desc: '8-photo layout · Cutting guides', time: '2 mins ago', icon: Camera, color: 'text-indigo-400' },
-        { title: 'Document PDF Compressed', desc: '4.8MB → 210KB (95% savings)', time: '10 mins ago', icon: FileArchive, color: 'text-amber-400' },
-        { title: 'Signature BG Removed', desc: 'Transparent PNG generated', time: '1 hour ago', icon: PenLine, color: 'text-pink-400' }
-    ]
+    // Build real tool usage breakdown from user.usage (or guestUsage)
+    const toolUsageItems = isLoggedIn
+        ? [
+            { label: 'Passport Photos',    count: user?.usage?.passport   || 0, icon: Camera,      color: '#6366f1' },
+            { label: 'Files Compressed',   count: user?.usage?.compress   || 0, icon: FileArchive,  color: '#f59e0b' },
+            { label: 'PDF Operations',     count: user?.usage?.pdf        || 0, icon: FileText,     color: '#10b981' },
+            { label: 'Signatures Created', count: user?.usage?.signature  || 0, icon: PenLine,      color: '#ec4899' },
+            { label: 'QR Sessions',        count: user?.usage?.qrSessions || 0, icon: QrCode,       color: '#0ea5e9' },
+          ].filter(x => x.count > 0)
+        : Object.entries(guestUsage)
+            .filter(([, v]) => v > 0)
+            .map(([key, count]) => ({
+                label: { passport:'Passport Photos', compress:'Files Compressed', pdf:'PDF Operations', signature:'Signatures' }[key] || key,
+                count,
+                icon: { passport: Camera, compress: FileArchive, pdf: FileText, signature: PenLine }[key] || Zap,
+                color: { passport:'#6366f1', compress:'#f59e0b', pdf:'#10b981', signature:'#ec4899' }[key] || '#94a3b8',
+            }))
+
+    const usageMonth = user?.usage?.month || new Date().toISOString().slice(0, 7)
 
     return (
         <div className="page" style={{ animation: 'fadeSlide 0.5s ease both' }}>
@@ -207,37 +220,56 @@ export default function Home() {
                     </div>
                 </div>
 
-                {/* ── RECENT SHOP ACTIVITY FEED ── */}
+                {/* ── THIS MONTH'S TOOL USAGE ── */}
                 <div>
                     <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)', marginBottom: '18px' }}>
-                        Live Activity Log
+                        This Month's Usage
+                        {isLoggedIn && (
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--muted)', marginLeft: 8 }}>
+                                {usageMonth}
+                            </span>
+                        )}
                     </h3>
-                    <div className="card" style={{ padding: '20px', background: 'var(--card)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {recentActivities.map((act, idx) => {
-                            const ActIcon = act.icon
-                            return (
-                                <div key={idx} style={{ display: 'flex', gap: '12px', alignItems: 'start' }}>
-                                    <div className="mt-0.5">
-                                        <ActIcon size={16} className={act.color} />
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {act.title}
+                    <div className="card" style={{ padding: '20px', background: 'var(--card)', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                        {toolUsageItems.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                                <Sparkles size={28} color="var(--muted)" style={{ margin: '0 auto 10px' }} />
+                                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>No activity yet</div>
+                                <p style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: 4 }}>
+                                    Use any tool above to see your stats here.
+                                </p>
+                            </div>
+                        ) : (
+                            toolUsageItems.map((item, idx) => {
+                                const Icon = item.icon
+                                return (
+                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{
+                                            width: 34, height: 34, borderRadius: 10,
+                                            background: item.color + '18',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                        }}>
+                                            <Icon size={15} color={item.color} />
                                         </div>
-                                        <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                                            {act.desc}
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>{item.label}</div>
+                                        </div>
+                                        <div style={{
+                                            fontSize: '15px', fontWeight: 800, color: item.color,
+                                            background: item.color + '12', padding: '3px 10px',
+                                            borderRadius: 8, minWidth: 36, textAlign: 'center',
+                                        }}>
+                                            {item.count}
                                         </div>
                                     </div>
-                                    <span style={{ fontSize: '10px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                                        {act.time}
-                                    </span>
-                                </div>
-                            )
-                        })}
+                                )
+                            })
+                        )}
 
                         {/* Customer QR Quick Session CTA */}
                         <div style={{
-                            marginTop: '12px', padding: '14px', borderRadius: '12px',
+                            marginTop: '8px', padding: '14px', borderRadius: '12px',
                             background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.15)',
                             textAlign: 'center'
                         }}>
@@ -246,7 +278,7 @@ export default function Home() {
                                 Customer Waiting?
                             </div>
                             <p style={{ fontSize: '11px', color: 'var(--muted)', margin: '4px 0 10px 0' }}>
-                                Start a QR file upload session to transfer files from their phone.
+                                Start a QR session to transfer files from their phone.
                             </p>
                             <button
                                 onClick={() => nav('/qr-session')}

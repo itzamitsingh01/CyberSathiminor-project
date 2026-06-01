@@ -1,68 +1,98 @@
 /**
- * session.service.js – In-memory session store for QR upload sessions.
- * Files are tracked by Cloudinary { url, publicId } and deleted from cloud on expiry.
+ * session.service.js – MongoDB-backed QR upload session store.
+ *
+ * Replaces the previous in-memory Map (which was wiped on every server restart/deploy).
+ * Sessions expire via MongoDB TTL index on the expiresAt field.
+ * Cloudinary files are cleaned up by the expireSession() function called from
+ * the scheduled cleanup job or explicitly by the controller.
  */
 const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
+const Session = require('../models/Session');
 const { deleteFile } = require('../utils/cloudinary');
 
-const SESSIONS = new Map();
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Create a new session and generate its QR code.
+ * Create a new session in MongoDB and generate its QR code.
+ * @param {string} toolType
+ * @param {string} baseUrl
+ * @param {string} userId  – MongoDB ObjectId of the authenticated shop operator
  */
-async function createSession(toolType, baseUrl) {
+async function createSession(toolType, baseUrl, userId) {
     const sessionId = uuidv4();
     const uploadUrl = `${baseUrl}/upload/${sessionId}`;
-    const qrDataUrl = await QRCode.toDataURL(uploadUrl, { width: 256 });
+    const qrDataUrl = await QRCode.toDataURL(uploadUrl, { width: 300 });
 
-    const now = Date.now();
-    const session = {
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+
+    const session = await Session.create({
         sessionId,
         toolType,
         uploadUrl,
         qrDataUrl,
-        files: [],           // [{ filename, originalname, url, publicId, size, mimetype, uploadedAt }]
-        createdAt: now,
-        expiresAt: now + SESSION_TTL_MS,
-    };
+        files: [],
+        createdBy: userId || null,
+        expiresAt,
+    });
 
-    SESSIONS.set(sessionId, session);
-    setTimeout(() => expireSession(sessionId), SESSION_TTL_MS);
-    return session;
+    return session.toObject();
 }
 
-/** Get session (null if missing or expired). */
-function getSession(sessionId) {
-    const session = SESSIONS.get(sessionId);
-    if (!session) return null;
-    if (Date.now() > session.expiresAt) { expireSession(sessionId); return null; }
-    return session;
+/**
+ * Get session by ID (returns null if missing or expired).
+ */
+async function getSession(sessionId) {
+    const session = await Session.findOne({
+        sessionId,
+        expiresAt: { $gt: new Date() },  // not yet expired
+    }).lean();
+    return session || null;
 }
 
-/** Add an uploaded file record (with Cloudinary URL) to a session. */
-function addFileToSession(sessionId, fileInfo) {
-    const session = getSession(sessionId);
+/**
+ * Add an uploaded file record to an existing session.
+ */
+async function addFileToSession(sessionId, fileInfo) {
+    const session = await Session.findOneAndUpdate(
+        { sessionId, expiresAt: { $gt: new Date() } },
+        { $push: { files: fileInfo } },
+        { new: true, lean: true }
+    );
     if (!session) throw new Error('Session not found or expired');
-    session.files.push(fileInfo);
     return session;
 }
 
-/** Delete session + remove its files from Cloudinary. */
+/**
+ * Manually expire a session: delete its Cloudinary files and remove from DB.
+ */
 async function expireSession(sessionId) {
-    const session = SESSIONS.get(sessionId);
+    const session = await Session.findOne({ sessionId }).lean();
     if (!session) return;
 
+    // Delete Cloudinary files
     for (const f of session.files) {
         if (f.publicId) {
             const resourceType = f.mimetype?.includes('pdf') ? 'raw' : 'image';
-            await deleteFile(f.publicId, resourceType);
+            try {
+                await deleteFile(f.publicId, resourceType);
+            } catch (err) {
+                console.error(`Cloudinary delete failed for ${f.publicId}:`, err.message);
+            }
         }
     }
 
-    SESSIONS.delete(sessionId);
+    await Session.deleteOne({ sessionId });
     console.log(`Session ${sessionId} expired & Cloudinary files cleaned up.`);
 }
 
-module.exports = { createSession, getSession, addFileToSession, expireSession };
+/**
+ * Check if a session was created by a specific user (for socket auth).
+ */
+async function isSessionOwner(sessionId, userId) {
+    const session = await Session.findOne({ sessionId }).lean();
+    if (!session) return false;
+    return session.createdBy?.toString() === userId?.toString();
+}
+
+module.exports = { createSession, getSession, addFileToSession, expireSession, isSessionOwner };

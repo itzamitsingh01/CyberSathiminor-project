@@ -9,6 +9,7 @@ import {
     CheckCircle2, ExternalLink,
 } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
+import useAuthStore from '../store/authStore'
 
 /* ── Print a single image URL in a hidden iframe ── */
 function printFileUrl(url, filename) {
@@ -39,6 +40,7 @@ export default function QrSession() {
     const nav = useNavigate()
     const [searchParams] = useSearchParams()
     const { t } = useLanguage()
+    const { accessToken } = useAuthStore()
 
     // Read toolType from URL query (?tool=passport) — default 'passport'
     const defaultTool = searchParams.get('tool') || 'passport'
@@ -78,11 +80,15 @@ export default function QrSession() {
         const socket = io(socketUrl)
         socket.on('connect', () => {
             setConnected(true)
-            socket.emit('join-session', sessionId)
+            // Pass access token so server can verify ownership (M-4 fix)
+            socket.emit('join-session', { sessionId, token: accessToken })
             axios.get(`/session/${sessionId}`).catch(() => {
                 toast.error('Session expired or lost. Please generate a new QR.')
                 handleEnd()
             })
+        })
+        socket.on('session-error', (data) => {
+            toast.error(data?.message || 'Session error')
         })
         socket.on('disconnect', () => setConnected(false))
         socket.on('file-uploaded', (data) => {

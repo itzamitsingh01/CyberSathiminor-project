@@ -4,11 +4,12 @@
 import useAuthStore from '../store/authStore'
 
 export function useAuth() {
-    const { user, accessToken, setAuth, clearAuth } = useAuthStore()
+    const { user, accessToken, isHydrated, setAuth, clearAuth } = useAuthStore()
 
     const isLoggedIn = !!accessToken
     const isPremium  = user?.subscription?.plan === 'premium'
     const isAdmin    = user?.role === 'admin'
 
-    return { user, accessToken, isLoggedIn, isPremium, isAdmin, setAuth, clearAuth }
+    return { user, accessToken, isLoggedIn, isPremium, isAdmin, isHydrated, setAuth, clearAuth }
 }
+
