@@ -75,7 +75,9 @@ function PageLoader() {
  * mistakenly redirected during the async /auth/me call. (C-4 fix)
  */
 function AuthOnlyRoute({ children }) {
-    const { isLoggedIn, isHydrated } = useAuthStore()
+    // isLoggedIn is NOT a store field — compute it from accessToken
+    const { accessToken, isHydrated } = useAuthStore()
+    const isLoggedIn = !!accessToken
 
     // Still waiting for hydration — show spinner instead of redirecting
     if (!isHydrated) return <PageLoader />
