@@ -6,7 +6,7 @@ import { io } from 'socket.io-client'
 import {
     ArrowLeft, QrCode, FileText, Clock, Wifi, WifiOff,
     Download, Pause, Play, StopCircle, Printer, Copy,
-    CheckCircle2, ExternalLink,
+    CheckCircle2, ExternalLink, Camera, FileArchive, PenLine,
 } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 import useAuthStore from '../store/authStore'
@@ -29,6 +29,47 @@ function printFileUrl(url, filename) {
           <body><img src="${url}" onload="window.focus();window.print();" /></body>
         </html>`)
     setTimeout(() => document.body.removeChild(iframe), 15000)
+}
+
+/* ── Tool action buttons shown on each file card ── */
+function FileToolActions({ file, nav }) {
+    const isImg = file.mimetype?.startsWith('image/')
+
+    function openTool(path) {
+        const params = new URLSearchParams({
+            fileId:   file._id || '',
+            fileUrl:  file.url,
+            fileName: file.originalname,
+        })
+        nav(`${path}?${params.toString()}`)
+    }
+
+    const toolBtns = [
+        isImg && { label: 'Passport', color: '#6366f1', path: '/passport' },
+        { label: 'Compress',  color: '#f59e0b', path: '/compress' },
+        { label: 'PDF',       color: '#10b981', path: '/pdf' },
+        isImg && { label: 'Signature', color: '#ec4899', path: '/signature' },
+    ].filter(Boolean)
+
+    return (
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+            {toolBtns.map(btn => (
+                <button
+                    key={btn.path}
+                    onClick={() => openTool(btn.path)}
+                    style={{
+                        padding: '4px 9px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                        background: btn.color + '18', border: `1px solid ${btn.color}44`,
+                        color: btn.color, cursor: 'pointer', transition: 'all 0.12s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = btn.color + '33'}
+                    onMouseLeave={e => e.currentTarget.style.background = btn.color + '18'}
+                >
+                    {btn.label}
+                </button>
+            ))}
+        </div>
+    )
 }
 
 /* ── Copy text to clipboard ── */
@@ -352,12 +393,16 @@ export default function QrSession() {
                                                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
                                                     {Math.round(f.size / 1024)} KB · {new Date(f.uploadedAt).toLocaleTimeString()}
                                                 </div>
+
+                                                {/* ── Tool action buttons ── */}
+                                                <FileToolActions file={f} nav={nav} />
                                             </div>
 
-                                            {/* Action buttons (always visible on mobile, hover on desktop) */}
+                                            {/* ── Utility buttons (Download, Print, Open) ── */}
                                             <div style={{
-                                                display: 'flex', gap: 6, flexShrink: 0,
-                                                opacity: isHovered ? 1 : 0.35,
+                                                display: 'flex', gap: 5, flexShrink: 0,
+                                                flexDirection: 'column',
+                                                opacity: isHovered ? 1 : 0.4,
                                                 transition: 'opacity 0.18s',
                                             }}>
                                                 {/* Download */}
@@ -368,7 +413,7 @@ export default function QrSession() {
                                                     rel="noreferrer"
                                                     title="Download"
                                                     style={{
-                                                        width: 34, height: 34, borderRadius: 10,
+                                                        width: 30, height: 30, borderRadius: 9,
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                         background: 'rgba(99,102,241,0.1)', color: '#6366f1',
                                                         border: '1px solid rgba(99,102,241,0.2)',
@@ -376,23 +421,23 @@ export default function QrSession() {
                                                     }}
                                                     onClick={e => e.stopPropagation()}
                                                 >
-                                                    <Download size={14} />
+                                                    <Download size={13} />
                                                 </a>
 
                                                 {/* Print */}
                                                 {isImg && (
                                                     <button
-                                                        title="Print this file"
+                                                        title="Print"
                                                         onClick={() => printFileUrl(f.url, f.originalname)}
                                                         style={{
-                                                            width: 34, height: 34, borderRadius: 10,
+                                                            width: 30, height: 30, borderRadius: 9,
                                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                             background: 'rgba(16,185,129,0.1)', color: '#10b981',
                                                             border: '1px solid rgba(16,185,129,0.2)',
                                                             cursor: 'pointer', transition: 'all 0.15s',
                                                         }}
                                                     >
-                                                        <Printer size={14} />
+                                                        <Printer size={13} />
                                                     </button>
                                                 )}
 
@@ -403,7 +448,7 @@ export default function QrSession() {
                                                     rel="noreferrer"
                                                     title="Open in new tab"
                                                     style={{
-                                                        width: 34, height: 34, borderRadius: 10,
+                                                        width: 30, height: 30, borderRadius: 9,
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                         background: 'var(--input-bg)', color: 'var(--muted)',
                                                         border: '1px solid var(--border)',
@@ -411,24 +456,9 @@ export default function QrSession() {
                                                     }}
                                                     onClick={e => e.stopPropagation()}
                                                 >
-                                                    <ExternalLink size={13} />
+                                                    <ExternalLink size={12} />
                                                 </a>
                                             </div>
-
-                                            {/* Hover label — Print hint — mobile-friendly floating badge */}
-                                            {isHovered && isImg && (
-                                                <div style={{
-                                                    position: 'absolute',
-                                                    bottom: -28, left: '50%', transform: 'translateX(-50%)',
-                                                    background: 'rgba(16,185,129,0.95)',
-                                                    color: '#fff', fontSize: 11, fontWeight: 700,
-                                                    padding: '3px 10px', borderRadius: 8,
-                                                    whiteSpace: 'nowrap', pointerEvents: 'none',
-                                                    zIndex: 10, display: 'flex', alignItems: 'center', gap: 4,
-                                                }}>
-                                                    <Printer size={11} /> Click 🖨️ to print
-                                                </div>
-                                            )}
                                         </div>
                                     )
                                 })}

@@ -5,12 +5,12 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const path = require('path');
 const rateLimit = require('express-rate-limit');
 
 const authRoutes      = require('./routes/auth.routes');
 const sessionRoutes   = require('./routes/session.routes');
 const uploadRoutes    = require('./routes/upload.routes');
+const filesRoutes     = require('./routes/files.routes');
 const passportRoutes  = require('./routes/passport.routes');
 const compressRoutes  = require('./routes/compress.routes');
 const pdfRoutes       = require('./routes/pdf.routes');
@@ -39,8 +39,7 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded files statically
-app.use('/files', express.static(path.join(__dirname, '..', 'uploads')));
+// (Static /files removed — all file storage is Cloudinary, no local uploads folder)
 
 // ── Rate Limiters ─────────────────────────────────────────────────
 
@@ -103,6 +102,7 @@ app.use('/api/auth',      authRoutes);
 app.use('/api/session/create', sessionLimiter);
 app.use('/api/session',   sessionRoutes);
 app.use('/api/upload',    uploadLimiter, uploadRoutes);
+app.use('/api/files',     toolLimiter, filesRoutes);
 app.use('/api/passport',  toolLimiter, passportRoutes);
 app.use('/api/compress',  toolLimiter, compressRoutes);
 app.use('/api/pdf',       toolLimiter, pdfRoutes);
@@ -114,7 +114,7 @@ app.get('/', (_req, res) => res.json({ status: 'ok', app: 'CyberSathi Backend' }
 // Global Error Handler
 app.use((err, req, res, _next) => {
     console.error('Unhandled Error:', err.message);
-    // Multer file type error
+    // Multer / file-type validation error
     if (err.message && err.message.startsWith('File type not allowed')) {
         return res.status(400).json({ success: false, message: err.message });
     }

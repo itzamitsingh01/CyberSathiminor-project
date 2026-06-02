@@ -6,6 +6,7 @@ import {
 import { useLanguage } from '../LanguageContext'
 import { useAuth } from '../hooks/useAuth'
 import useGuestStore from '../store/guestStore'
+import RecentFiles from '../components/RecentFiles'
 
 export default function Home() {
     const nav = useNavigate()
@@ -295,7 +296,18 @@ export default function Home() {
                     </div>
                 </div>
             </div>
-            
+
+            {/* ── RECENT FILES PANEL ── */}
+            {isLoggedIn && (
+                <div className="card" style={{
+                    padding: '24px', marginTop: '8px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--card)',
+                }}>
+                    <RecentFiles />
+                </div>
+            )}
+
             <p style={{ textAlign: 'center', color: 'var(--muted)', marginTop: '48px', fontSize: '12px' }}>
                 CyberSathi SaaS © {new Date().getFullYear()} · Elevating Internet Café Operations
             </p>

@@ -9,6 +9,15 @@ const { mergePdfs, jpgToPdf, compressPdf } = require('../services/pdf.service');
 const { uploadBuffer, downloadBuffer } = require('../utils/cloudinary');
 const User = require('../models/User');
 
+// ── Usage tracking helper ────────────────────────────────────────────────────
+async function trackUsage(userId) {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    await User.findByIdAndUpdate(userId, {
+        $inc: { 'usage.pdf': 1 },
+        $set: { 'usage.month': currentMonth },
+    });
+}
+
 // POST /pdf/merge  — multiple PDFs (field: "pdfs")
 router.post('/merge', authenticate, upload.array('pdfs', 10), async (req, res) => {
     if (!req.files || req.files.length < 2)
@@ -17,14 +26,7 @@ router.post('/merge', authenticate, upload.array('pdfs', 10), async (req, res) =
         const buffers = req.files.map((f) => f.buffer);
         const merged = await mergePdfs(buffers);
         const { url } = await uploadBuffer(merged, { folder: 'mp-online-hub/pdf', resource_type: 'raw', format: 'pdf' });
-
-        // Track usage
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        await User.findByIdAndUpdate(req.user.id, {
-            $inc: { 'usage.pdf': 1 },
-            $set: { 'usage.month': currentMonth },
-        });
-
+        await trackUsage(req.user.id);
         res.json({ success: true, url, pages: req.files.length });
     } catch (err) {
         console.error('PDF merge error:', err);
@@ -40,14 +42,7 @@ router.post('/jpg-to-pdf', authenticate, upload.array('images', 20), async (req,
         const buffers = req.files.map((f) => f.buffer);
         const pdf = await jpgToPdf(buffers);
         const { url } = await uploadBuffer(pdf, { folder: 'mp-online-hub/pdf', resource_type: 'raw', format: 'pdf' });
-
-        // Track usage
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        await User.findByIdAndUpdate(req.user.id, {
-            $inc: { 'usage.pdf': 1 },
-            $set: { 'usage.month': currentMonth },
-        });
-
+        await trackUsage(req.user.id);
         res.json({ success: true, url, pages: req.files.length });
     } catch (err) {
         console.error('JPG-to-PDF error:', err);
@@ -63,14 +58,7 @@ router.post('/compress', authenticate, upload.single('pdf'), async (req, res) =>
         const compressed = await compressPdf(req.file.buffer);
         const finalSizeKB = Math.round(compressed.length / 1024);
         const { url } = await uploadBuffer(compressed, { folder: 'mp-online-hub/pdf', resource_type: 'raw', format: 'pdf' });
-
-        // Track usage
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        await User.findByIdAndUpdate(req.user.id, {
-            $inc: { 'usage.pdf': 1 },
-            $set: { 'usage.month': currentMonth },
-        });
-
+        await trackUsage(req.user.id);
         res.json({ success: true, url, originalSizeKB, finalSizeKB });
     } catch (err) {
         console.error('PDF compress error:', err);
@@ -80,25 +68,16 @@ router.post('/compress', authenticate, upload.single('pdf'), async (req, res) =>
 
 // POST /pdf/from-session  — merge PDFs uploaded via QR session (by Cloudinary URLs)
 router.post('/from-session', authenticate, async (req, res) => {
-    const { urls } = req.body; // array of Cloudinary PDF URLs
+    const { urls } = req.body;
     if (!urls || !Array.isArray(urls) || urls.length < 1)
         return res.status(400).json({ success: false, message: 'No URLs provided' });
-    // Validate all URLs are from Cloudinary
-    if (urls.some(u => typeof u !== 'string' || !u.includes('cloudinary.com'))) {
+    if (urls.some(u => typeof u !== 'string' || !u.includes('cloudinary.com')))
         return res.status(400).json({ success: false, message: 'Invalid URL in list' });
-    }
     try {
         const buffers = await Promise.all(urls.map(downloadBuffer));
         const merged = await mergePdfs(buffers);
         const { url } = await uploadBuffer(merged, { folder: 'mp-online-hub/pdf', resource_type: 'raw', format: 'pdf' });
-
-        // Track usage
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        await User.findByIdAndUpdate(req.user.id, {
-            $inc: { 'usage.pdf': 1 },
-            $set: { 'usage.month': currentMonth },
-        });
-
+        await trackUsage(req.user.id);
         res.json({ success: true, url });
     } catch (err) {
         console.error('PDF from-session error:', err);
@@ -106,15 +85,31 @@ router.post('/from-session', authenticate, async (req, res) => {
     }
 });
 
+// POST /pdf/jpg-to-pdf-from-url — convert a single preloaded Cloudinary image to PDF (no re-upload)
+// Body: { url: <cloudinary-image-url> }
+router.post('/jpg-to-pdf-from-url', authenticate, async (req, res) => {
+    const { url } = req.body;
+    if (!url || !url.includes('cloudinary.com'))
+        return res.status(400).json({ success: false, message: 'Valid Cloudinary URL required' });
+    try {
+        const buffer = await downloadBuffer(url);
+        const pdf = await jpgToPdf([buffer]);
+        const { url: resultUrl } = await uploadBuffer(pdf, { folder: 'mp-online-hub/pdf', resource_type: 'raw', format: 'pdf' });
+        await trackUsage(req.user.id);
+        res.json({ success: true, url: resultUrl, pages: 1 });
+    } catch (err) {
+        console.error('PDF jpg-to-pdf-from-url error:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // GET /pdf/download?url=<cloudinary-url>&name=<filename>
-// Proxy: fetches PDF from Cloudinary server-side and streams it to the browser.
 router.get('/download', authenticate, async (req, res) => {
     const { url, name = 'document.pdf' } = req.query;
     if (!url) return res.status(400).json({ success: false, message: 'url query param required' });
     const decoded = decodeURIComponent(url);
-    if (!decoded.includes('cloudinary.com')) {
+    if (!decoded.includes('cloudinary.com'))
         return res.status(400).json({ success: false, message: 'Invalid URL' });
-    }
     try {
         const buffer = await downloadBuffer(decoded);
         res.setHeader('Content-Type', 'application/pdf');

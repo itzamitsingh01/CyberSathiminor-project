@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import axios from '../services/api'
 import toast from 'react-hot-toast'
 import {
     ArrowLeft, PenLine, Download, RefreshCw, Upload,
-    Undo2, Sliders, Eye, EyeOff, Layers,
+    Undo2, Sliders, Eye, EyeOff, Layers, CheckCircle2, X,
 } from 'lucide-react'
 import { useGuestLimit } from '../hooks/useGuestLimit'
 
@@ -37,15 +37,21 @@ const PEN_SIZES = [2, 3.5, 5]
 
 export default function SignatureTool() {
     const nav = useNavigate()
+    const [searchParams] = useSearchParams()
     const { checkAndConsume, GuestModal } = useGuestLimit('signature')
+
+    // Preloaded file from Recent Files panel
+    const preloadUrl  = searchParams.get('fileUrl')  || null
+    const preloadId   = searchParams.get('fileId')   || null
+    const preloadName = searchParams.get('fileName') || null
 
     const [tab,        setTab]        = useState('upload')
     const [file,       setFile]       = useState(null)
-    const [preview,    setPreview]    = useState(null)
+    const [preview,    setPreview]    = useState(preloadUrl)  // show preloaded image immediately
     const [threshold,  setThreshold]  = useState(180)
     const [loading,    setLoading]    = useState(false)
     const [resultUrl,  setResultUrl]  = useState(null)
-    const [showOrig,   setShowOrig]   = useState(false) // before/after toggle
+    const [showOrig,   setShowOrig]   = useState(false)
     const [penSize,    setPenSize]    = useState(3.5)
     const [penColor,   setPenColor]   = useState('#000000')
 
@@ -147,13 +153,25 @@ export default function SignatureTool() {
                 const canvas = canvasRef.current
                 const blob = await new Promise(res => canvas.toBlob(res, 'image/png'))
                 fd.append('image', blob, 'signature.png')
+                const res = await axios.post('/signature/generate', fd)
+                setResultUrl(res.data.url)
+            } else if (preloadUrl && !file) {
+                // Use preloaded Cloudinary URL — no re-upload
+                const res = await axios.post('/signature/generate-from-url', {
+                    url: preloadUrl, threshold,
+                })
+                setResultUrl(res.data.url)
+                if (preloadId) {
+                    axios.post(`/files/${preloadId}/history`, {
+                        action: 'signature', resultUrl: res.data.url,
+                    }).catch(() => {})
+                }
             } else {
                 if (!file) { toast.error('Upload a signature image first'); setLoading(false); return }
                 fd.append('image', file)
+                const res = await axios.post('/signature/generate', fd)
+                setResultUrl(res.data.url)
             }
-
-            const res = await axios.post('/signature/generate', fd)
-            setResultUrl(res.data.url)
             toast.success('Background removed!')
         } catch (err) {
             toast.error(err.response?.data?.message || 'Processing failed')
@@ -181,6 +199,27 @@ export default function SignatureTool() {
                 ))}
             </div>
 
+            {/* Preloaded file banner — only shown on upload tab */}
+            {tab === 'upload' && preloadUrl && !file && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+                    padding: '10px 14px', borderRadius: 12,
+                    background: 'rgba(236,72,153,0.08)', border: '1.5px solid rgba(236,72,153,0.25)',
+                }}>
+                    <CheckCircle2 size={16} color="#ec4899" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#f472b6' }}>File preloaded from Recent Uploads</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {preloadName || preloadUrl}
+                        </div>
+                    </div>
+                    <button onClick={() => nav('/signature', { replace: true })}
+                        style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
+
             {/* ── Desktop: two-panel layout ── */}
             <div style={{
                 display: 'grid',
@@ -194,11 +233,13 @@ export default function SignatureTool() {
                     {tab === 'upload' && (
                         <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} style={{ marginBottom: 16 }}>
                             <input {...getInputProps()} />
-                            {preview ? (
+                            {(preview || preloadUrl) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                                    <img src={preview} alt="sig"
+                                    <img src={preview || preloadUrl} alt="sig"
                                         style={{ maxHeight: 110, borderRadius: 8, background: '#fff', padding: 10, border: '1px solid var(--border)' }} />
-                                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>Tap to change</span>
+                                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                                        {preloadUrl && !file ? 'Using preloaded file · tap to change' : 'Tap to change'}
+                                    </span>
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>

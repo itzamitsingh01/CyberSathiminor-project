@@ -1,12 +1,12 @@
-import { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useCallback, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import axios from '../services/api'
 import toast from 'react-hot-toast'
-import { ArrowLeft, FileText, Download, Image, X, ChevronUp, ChevronDown } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Image, X, ChevronUp, ChevronDown, CheckCircle2 } from 'lucide-react'
 import { useGuestLimit } from '../hooks/useGuestLimit'
 
-/** Fetch via backend proxy and trigger a real browser download (bypasses cross-origin download restrictions) */
+/** Fetch via backend proxy and trigger a real browser download */
 async function downloadFile(proxyUrl, filename) {
     try {
         const res = await fetch(proxyUrl)
@@ -25,18 +25,30 @@ async function downloadFile(proxyUrl, filename) {
 }
 
 const TABS = [
-    { id: 'merge', label: 'Merge PDFs', accent: '#6366f1' },
-    { id: 'jpg-to-pdf', label: 'JPG → PDF', accent: '#10b981' },
-    { id: 'compress', label: 'Compress', accent: '#f59e0b' },
+    { id: 'merge',      label: 'Merge PDFs',  accent: '#6366f1' },
+    { id: 'jpg-to-pdf', label: 'JPG → PDF',   accent: '#10b981' },
+    { id: 'compress',   label: 'Compress',    accent: '#f59e0b' },
 ]
 
 export default function PdfTools() {
     const nav = useNavigate()
+    const [searchParams] = useSearchParams()
     const { checkAndConsume, GuestModal } = useGuestLimit('pdf')
-    const [tab, setTab] = useState('merge')
-    const [files, setFiles] = useState([])
+
+    // Preloaded file from Recent Files panel
+    const preloadUrl  = searchParams.get('fileUrl')  || null
+    const preloadId   = searchParams.get('fileId')   || null
+    const preloadName = searchParams.get('fileName') || null
+
+    const [tab, setTab]       = useState('jpg-to-pdf') // default to jpg-to-pdf when preloaded image
+    const [files, setFiles]   = useState([])
     const [loading, setLoading] = useState(false)
-    const [result, setResult] = useState(null) // { url, pages?, originalSizeKB?, finalSizeKB? }
+    const [result, setResult]   = useState(null)
+
+    // When a preloaded image URL arrives, default to jpg-to-pdf tab
+    useEffect(() => {
+        if (preloadUrl) setTab('jpg-to-pdf')
+    }, [preloadUrl])
 
     const accept = tab === 'jpg-to-pdf' ? { 'image/*': [] } : { 'application/pdf': ['.pdf'] }
     const multiple = tab !== 'compress'
@@ -50,13 +62,33 @@ export default function PdfTools() {
 
     function switchTab(id) { setTab(id); setFiles([]); setResult(null) }
     function removeFile(i) { setFiles((p) => p.filter((_, idx) => idx !== i)) }
-    function moveUp(i) { if (i === 0) return; const a = [...files];[a[i - 1], a[i]] = [a[i], a[i - 1]]; setFiles(a) }
-    function moveDown(i) { if (i === files.length - 1) return; const a = [...files];[a[i], a[i + 1]] = [a[i + 1], a[i]]; setFiles(a) }
+    function moveUp(i)   { if (i === 0) return; const a = [...files]; [a[i-1], a[i]] = [a[i], a[i-1]]; setFiles(a) }
+    function moveDown(i) { if (i === files.length - 1) return; const a = [...files]; [a[i], a[i+1]] = [a[i+1], a[i]]; setFiles(a) }
 
     async function handleProcess() {
         if (!checkAndConsume()) return
+
+        // Special case: preloaded image + jpg-to-pdf tab → use from-url endpoint
+        if (preloadUrl && tab === 'jpg-to-pdf' && files.length === 0) {
+            setLoading(true)
+            try {
+                const res = await axios.post('/pdf/jpg-to-pdf-from-url', { url: preloadUrl })
+                setResult(res.data)
+                toast.success('PDF ready!')
+                if (preloadId) {
+                    axios.post(`/files/${preloadId}/history`, {
+                        action: 'pdf', resultUrl: res.data.url,
+                    }).catch(() => {})
+                }
+            } catch (err) {
+                toast.error(err.response?.data?.message || 'Operation failed')
+            } finally { setLoading(false) }
+            return
+        }
+
         if (files.length === 0) return toast.error('Add files first')
         if (tab === 'merge' && files.length < 2) return toast.error('Need at least 2 PDFs to merge')
+
         setLoading(true)
         try {
             const fd = new FormData()
@@ -78,13 +110,14 @@ export default function PdfTools() {
         } finally { setLoading(false) }
     }
 
+    const usingPreload = preloadUrl && tab === 'jpg-to-pdf' && files.length === 0
     const btnLabel = tab === 'merge' ? 'Merge PDFs' : tab === 'jpg-to-pdf' ? 'Convert to PDF' : 'Compress PDF'
     const currentTab = TABS.find((t) => t.id === tab)
 
     return (
         <div className="page">
             <div className="back-header">
-                <button className="back-btn" onClick={() => nav('/')}><ArrowLeft size={18} /></button>
+                <button className="back-btn" onClick={() => nav('/dashboard')}><ArrowLeft size={18} /></button>
                 <div>
                     <div className="page-title">PDF Tools</div>
                     <div className="page-sub">Merge · Convert · Compress</div>
@@ -102,22 +135,45 @@ export default function PdfTools() {
                 ))}
             </div>
 
+            {/* Preloaded file banner */}
+            {preloadUrl && tab === 'jpg-to-pdf' && files.length === 0 && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+                    padding: '10px 14px', borderRadius: 12,
+                    background: 'rgba(16,185,129,0.08)', border: '1.5px solid rgba(16,185,129,0.3)',
+                }}>
+                    <CheckCircle2 size={16} color="#10b981" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#34d399' }}>Image preloaded from Recent Uploads</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {preloadName || preloadUrl}
+                        </div>
+                    </div>
+                    <button onClick={() => nav('/pdf', { replace: true })}
+                        style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
+
             {/* Dropzone */}
             <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} style={{ marginBottom: 16 }}>
                 <input {...getInputProps()} />
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                     {tab === 'jpg-to-pdf' ? <Image size={38} color={currentTab.accent} /> : <FileText size={38} color={currentTab.accent} />}
                     <span style={{ color: 'var(--muted)', fontSize: 15 }}>
-                        {isDragActive ? 'Drop here!' : tab === 'merge'
-                            ? 'Upload PDFs (2 or more)'
-                            : tab === 'jpg-to-pdf'
-                                ? 'Upload JPG/PNG images'
-                                : 'Upload a single PDF'}
+                        {isDragActive ? 'Drop here!' : usingPreload
+                            ? 'Add more images or tap to replace'
+                            : tab === 'merge'
+                                ? 'Upload PDFs (2 or more)'
+                                : tab === 'jpg-to-pdf'
+                                    ? 'Upload JPG/PNG images'
+                                    : 'Upload a single PDF'}
                     </span>
                 </div>
             </div>
 
-            {/* File list with reorder */}
+            {/* File list */}
             {files.map((f, i) => (
                 <div key={`${f.name}-${i}`} className="file-item" style={{ animation: 'fadeSlide 0.25s ease both' }}>
                     <FileText size={18} color="var(--muted)" />

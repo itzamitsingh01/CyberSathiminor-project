@@ -1,12 +1,12 @@
 import { useState, useCallback, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import axios from '../services/api'
 import toast from 'react-hot-toast'
 import {
     ArrowLeft, Camera, Download, Image, Printer, Scissors,
     Eraser, X, User, Calendar, AlignVerticalJustifyCenter,
-    CropIcon, MoveVertical,
+    CropIcon, MoveVertical, CheckCircle2, Link,
 } from 'lucide-react'
 import { useGuestLimit } from '../hooks/useGuestLimit'
 
@@ -67,10 +67,16 @@ function Toggle({ on, onChange, label, sub, icon: Icon, color = '#4f46e5' }) {
 
 export default function PassportTool() {
     const nav = useNavigate()
+    const [searchParams] = useSearchParams()
     const { checkAndConsume, GuestModal } = useGuestLimit('passport')
 
+    // Preloaded file from Recent Files panel
+    const preloadUrl  = searchParams.get('fileUrl')  || null
+    const preloadId   = searchParams.get('fileId')   || null
+    const preloadName = searchParams.get('fileName') || null
+
     const [file,     setFile]     = useState(null)
-    const [preview,  setPreview]  = useState(null)
+    const [preview,  setPreview]  = useState(preloadUrl)   // show preloaded image immediately
     const [count,    setCount]    = useState(8)
     const [removeBg, setRemoveBg] = useState(false)
     const [loading,  setLoading]  = useState(false)
@@ -81,7 +87,7 @@ export default function PassportTool() {
     const [cropPosition,  setCropPosition]  = useState('center')
     const [personName,    setPersonName]    = useState('')
     const [showDate,      setShowDate]      = useState(false)
-    const [stampDate,     setStampDate]     = useState('')   // '' = today
+    const [stampDate,     setStampDate]     = useState('')
     const [dateFormat,    setDateFormat]    = useState('DD-MM-YYYY')
 
     // Revoke object URLs to prevent memory leaks (P-5 fix)
@@ -123,20 +129,37 @@ export default function PassportTool() {
     async function handleGenerate() {
         if (!checkAndConsume()) return
         const n = parseInt(count, 10)
-        if (!file) return toast.error('Please upload a photo first')
+        if (!preloadUrl && !file) return toast.error('Please upload a photo first')
         if (!n || n < 1) return toast.error('Enter a valid photo count (1–30)')
         setLoading(true)
         try {
-            const fd = new FormData()
-            fd.append('image', file)
-            fd.append('count', n)
-            fd.append('removeBg', String(removeBg))
-            fd.append('cropPosition', cropPosition)
-            fd.append('personName', personName.trim())
-            fd.append('showDate', String(showDate))
-            fd.append('stampDate', stampDate)
-            fd.append('dateFormat', dateFormat)
-            const res = await axios.post('/passport/generate', fd)
+            let res
+            if (preloadUrl) {
+                // Use preloaded Cloudinary URL — no re-upload
+                res = await axios.post('/passport/generate-from-url', {
+                    url: preloadUrl, count: n, removeBg: String(removeBg),
+                    cropPosition, personName: personName.trim(),
+                    showDate: String(showDate), stampDate, dateFormat,
+                })
+                // Track processing history if we have a file ID
+                if (preloadId) {
+                    axios.post(`/files/${preloadId}/history`, {
+                        action: 'passport', resultUrl: res.data.url,
+                    }).catch(() => {})
+                }
+            } else {
+                // Standard FormData upload
+                const fd = new FormData()
+                fd.append('image', file)
+                fd.append('count', n)
+                fd.append('removeBg', String(removeBg))
+                fd.append('cropPosition', cropPosition)
+                fd.append('personName', personName.trim())
+                fd.append('showDate', String(showDate))
+                fd.append('stampDate', stampDate)
+                fd.append('dateFormat', dateFormat)
+                res = await axios.post('/passport/generate', fd)
+            }
             setResultUrl(res.data.url)
             toast.success(`${n}-photo A4 sheet ready!`)
         } catch (err) {
@@ -155,14 +178,33 @@ export default function PassportTool() {
                 </div>
             </div>
 
+            {/* Preloaded file banner */}
+            {preloadUrl && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+                    padding: '10px 14px', borderRadius: 12,
+                    background: 'rgba(99,102,241,0.08)', border: '1.5px solid rgba(99,102,241,0.25)',
+                }}>
+                    <CheckCircle2 size={16} color="#6366f1" style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#818cf8' }}>File preloaded from Recent Uploads</div>
+                        <div style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preloadName || preloadUrl}</div>
+                    </div>
+                    <button onClick={() => { searchParams.delete('fileUrl'); nav('/passport', { replace: true }) }}
+                        style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
+
             {/* Dropzone */}
             <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} style={{ marginBottom: 20 }}>
                 <input {...getInputProps()} />
-                {preview ? (
+                {(preview || preloadUrl) ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                        <img src={preview} alt="preview"
+                        <img src={preview || preloadUrl} alt="preview"
                             style={{ width: 90, height: 116, objectFit: 'cover', borderRadius: 10, border: '2px solid rgba(99,102,241,0.4)' }} />
-                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>Tap to change photo</span>
+                        <span style={{ fontSize: 13, color: 'var(--muted)' }}>{preloadUrl && !file ? 'Using preloaded file · tap to change' : 'Tap to change photo'}</span>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
