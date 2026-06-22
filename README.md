@@ -67,3 +67,5 @@ npm run dev
 - **PDF**: pdf-lib
 - **Upload**: Multer
 - **QR**: qrcode
+## Author
+Amit Singh – [itzamitsingh01](https://github.com/itzamitsingh01)
