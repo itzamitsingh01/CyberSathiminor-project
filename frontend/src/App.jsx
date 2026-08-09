@@ -50,6 +50,8 @@ const QrSession        = lazy(() => import('./pages/QrSession'))
 const SubscriptionPage = lazy(() => import('./pages/SubscriptionPage'))
 const About            = lazy(() => import('./pages/About'))
 const Help             = lazy(() => import('./pages/Help'))
+const BgRemoverTool    = lazy(() => import('./pages/BgRemoverTool'))
+const OcrTool          = lazy(() => import('./pages/OcrTool'))
 
 /** Minimal spinner shown while lazy chunks load */
 function PageLoader() {
@@ -123,11 +125,13 @@ function App() {
       <AppShell />
     </Suspense>}>
                                 {/* <Suspense fallback={<PageLoader />}> */}
-                                    <Route path="/dashboard"  element={<Home />} />
-                                    <Route path="/passport"   element={<PassportTool />} />
-                                    <Route path="/compress"   element={<CompressTool />} />
-                                    <Route path="/pdf"        element={<PdfTools />} />
-                                    <Route path="/signature"  element={<SignatureTool />} />
+                                    <Route path="/dashboard"    element={<Home />} />
+                                    <Route path="/passport"     element={<PassportTool />} />
+                                    <Route path="/compress"     element={<CompressTool />} />
+                                    <Route path="/pdf"          element={<PdfTools />} />
+                                    <Route path="/signature"    element={<SignatureTool />} />
+                                    <Route path="/bg-remover"   element={<BgRemoverTool />} />
+                                    <Route path="/ocr"          element={<OcrTool />} />
                                     <Route path="/qr-session" element={
                                         <AuthOnlyRoute><QrSession /></AuthOnlyRoute>
                                     } />

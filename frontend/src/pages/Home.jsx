@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { 
     Camera, FileArchive, FileText, PenLine, QrCode, Zap, Shield, Clock, 
-    TrendingUp, FileUp, Sparkles, CheckCircle, ArrowRight
+    TrendingUp, FileUp, Sparkles, CheckCircle, ArrowRight, Wand2, ScanText
 } from 'lucide-react'
 import { useLanguage } from '../LanguageContext'
 import { useAuth } from '../hooks/useAuth'
@@ -64,6 +64,26 @@ export default function Home() {
             glow: 'rgba(14,165,233,0.2)',
             badge: 'LIVE WORKFLOW',
             badgeColor: '#38bdf8',
+        },
+        {
+            icon: Wand2,
+            title: 'AI Background Remover',
+            desc: 'Remove background from any photo instantly — passport, ID, or product images',
+            path: '/bg-remover',
+            gradient: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+            glow: 'rgba(124,58,237,0.2)',
+            badge: 'AI · FREE',
+            badgeColor: '#a78bfa',
+        },
+        {
+            icon: ScanText,
+            title: 'Smart OCR',
+            desc: 'Extract text from any image — documents, ID cards, handwritten notes, signboards',
+            path: '/ocr',
+            gradient: 'linear-gradient(135deg, #10b981, #06b6d4)',
+            glow: 'rgba(16,185,129,0.2)',
+            badge: 'ENG + HIN',
+            badgeColor: '#34d399',
         },
     ]
 
@@ -162,7 +182,7 @@ export default function Home() {
                         <h3 style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text)' }}>
                             Café Utility Toolkit
                         </h3>
-                        <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>5 tools loaded</span>
+                        <span style={{ fontSize: '12px', color: 'var(--muted)', fontWeight: 600 }}>7 tools loaded</span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }} className="sm-grid-2">
